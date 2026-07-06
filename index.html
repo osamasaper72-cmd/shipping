@@ -173,6 +173,10 @@
   /* Tab content + card entrance motion */
   @keyframes tabIn{from{opacity:0; transform:translateY(10px)} to{opacity:1; transform:translateY(0)}}
   #list, #logList, #doneList, #repsList{animation:tabIn .3s ease}
+  @keyframes swipeInFwd{from{opacity:0; transform:translateX(24px)} to{opacity:1; transform:translateX(0)}}
+  @keyframes swipeInBack{from{opacity:0; transform:translateX(-24px)} to{opacity:1; transform:translateX(0)}}
+  .swipe-fwd{animation:swipeInFwd .28s ease both !important}
+  .swipe-back{animation:swipeInBack .28s ease both !important}
   @keyframes cardIn{from{opacity:0; transform:translateY(10px)} to{opacity:1; transform:translateY(0)}}
   .card{animation:cardIn .35s ease both}
   .tab{transition:background .2s, color .2s, border-color .2s}
@@ -431,10 +435,10 @@
 
     const tab1Label = 'قيد التنفيذ';
     const tab2Label = d.role==='admin' ? 'تم التنفيذ' : 'تم التسليم';
-    html += '<div class="tabs">'+
-      '<button class="tab '+(MAIN_TAB==='pending'?'active':'')+'" onclick="switchMain(\'pending\')">'+tab1Label+'</button>'+
-      '<button class="tab '+(MAIN_TAB==='done'?'active':'')+'" onclick="switchMain(\'done\')">'+tab2Label+'</button>'+
-      (d.role==='admin' ? '<button class="tab '+(MAIN_TAB==='reps'?'active':'')+'" onclick="switchMain(\'reps\')">المناديب</button>' : '')+
+    html += '<div class="tabs" id="mainTabsBar">'+
+      '<button class="tab '+(MAIN_TAB==='pending'?'active':'')+'" data-tab="pending" onclick="switchMain(\'pending\')">'+tab1Label+'</button>'+
+      '<button class="tab '+(MAIN_TAB==='done'?'active':'')+'" data-tab="done" onclick="switchMain(\'done\')">'+tab2Label+'</button>'+
+      (d.role==='admin' ? '<button class="tab '+(MAIN_TAB==='reps'?'active':'')+'" data-tab="reps" onclick="switchMain(\'reps\')">المناديب</button>' : '')+
       '</div>';
 
     if(d.role==='admin' && MAIN_TAB==='pending' && s.noCode>0){
@@ -453,38 +457,62 @@
     return '<div class="stat"><b>'+n+'</b><span>'+label+'</span></div>';
   }
 
-  function switchMain(tab){ MAIN_TAB = tab; renderMainBody(); }
-  function switchSub(tab){ SUB_TAB = tab; renderMainBody(); }
+  function tabOrder(){
+    return ROLE==='admin' ? ['pending','done','reps'] : ['pending','done'];
+  }
 
-  function renderMainBody(){
+  function switchMain(tab){
+    if(tab === MAIN_TAB) return;
+    const order = tabOrder();
+    const dir = order.indexOf(tab) > order.indexOf(MAIN_TAB) ? 1 : -1;
+    MAIN_TAB = tab;
+    const bar = document.getElementById('mainTabsBar');
+    if(bar){
+      bar.querySelectorAll('.tab').forEach(function(btn){
+        btn.classList.toggle('active', btn.dataset.tab === tab);
+      });
+    }
+    renderMainBody(dir);
+  }
+
+  function switchSub(tab){
+    if(tab === SUB_TAB) return;
+    const order = ['log','collect'];
+    const dir = order.indexOf(tab) > order.indexOf(SUB_TAB) ? 1 : -1;
+    SUB_TAB = tab;
+    renderMainBody(dir);
+  }
+
+  function renderMainBody(dir){
     const body = document.getElementById('mainBody');
     if(!body) return;
+    const animClass = dir === 1 ? 'swipe-fwd' : dir === -1 ? 'swipe-back' : '';
 
     if(MAIN_TAB === 'pending'){
       body.innerHTML =
         '<input id="q" class="search" placeholder="بحث بالاسم أو الموبايل أو الكود" oninput="filterPending()">'+
-        '<div id="list"></div>';
+        '<div id="list" class="'+animClass+'"></div>';
       filterPending();
       return;
     }
 
     if(MAIN_TAB === 'reps' && ROLE === 'admin'){
-      body.innerHTML = '<div id="repsList"></div>';
+      body.innerHTML = '<div id="repsList" class="'+animClass+'"></div>';
       renderRepsTab(document.getElementById('repsList'));
       return;
     }
 
     if(ROLE === 'admin'){
       body.innerHTML =
-        '<div class="tabs">'+
-          '<button class="tab '+(SUB_TAB==='log'?'active':'')+'" onclick="switchSub(\'log\')">السجل</button>'+
-          '<button class="tab '+(SUB_TAB==='collect'?'active':'')+'" onclick="switchSub(\'collect\')">'+
+        '<div class="tabs" id="subTabsBar">'+
+          '<button class="tab '+(SUB_TAB==='log'?'active':'')+'" data-tab="log" onclick="switchSub(\'log\')">السجل</button>'+
+          '<button class="tab '+(SUB_TAB==='collect'?'active':'')+'" data-tab="collect" onclick="switchSub(\'collect\')">'+
           'التحصيل'+(BALANCES.length?' ('+BALANCES.length+')':'')+'</button>'+
         '</div>'+
-        '<div id="subBody"></div>';
-      renderSubBody();
+        '<div id="subBody" class="'+animClass+'"></div>';
+      renderSubBody(0);
     } else {
-      body.innerHTML = '<div id="doneList"></div>';
+      body.innerHTML = '<div id="doneList" class="'+animClass+'"></div>';
       const list = document.getElementById('doneList');
       if(!DONE.length){
         list.innerHTML = '<div class="center"><b>لسه مفيش حاجة منفّذة</b>هتظهر هنا أول ما تحدّد حالة أي شحنة.</div>';
