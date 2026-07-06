@@ -149,6 +149,47 @@
     font-family:inherit; font-weight:700; font-size:14px}
   .modal-actions .confirm{background:var(--go); color:#06241c}
   .modal-actions .cancel{background:var(--bg); border:1px solid var(--line); color:var(--ink)}
+
+  /* Status confirmation full-screen overlay */
+  .status-overlay{position:fixed; inset:0; background:rgba(15,22,32,.94); z-index:10000;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px;
+    opacity:0; transition:opacity .25s}
+  .status-overlay.show{opacity:1}
+  .status-circle{width:96px; height:96px; border-radius:50%; display:flex; align-items:center;
+    justify-content:center; font-size:44px; transform:scale(.4);
+    transition:transform .4s cubic-bezier(.34,1.56,.64,1)}
+  .status-overlay.show .status-circle{transform:scale(1)}
+  .status-circle.s-go{background:#16352b; color:var(--go); box-shadow:0 0 0 10px #16352b66}
+  .status-circle.s-no{background:#3a1f1f; color:var(--no); box-shadow:0 0 0 10px #3a1f1f66}
+  .status-circle.s-partial{background:#14283a; color:var(--partial); box-shadow:0 0 0 10px #14283a66}
+  .status-circle.s-dodge{background:#2a1f3a; color:var(--dodge); box-shadow:0 0 0 10px #2a1f3a66}
+  .status-circle.s-neutral{background:#22282f; color:var(--neutral); box-shadow:0 0 0 10px #22282f66}
+  .status-circle.s-cancel{background:#3a2414; color:var(--cancel); box-shadow:0 0 0 10px #3a241466}
+  .status-circle.s-wait{background:#3a301a; color:var(--wait); box-shadow:0 0 0 10px #3a301a66}
+  .status-title{font-size:19px; font-weight:800; color:var(--ink); opacity:0;
+    transform:translateY(6px); transition:opacity .3s .1s, transform .3s .1s}
+  .status-overlay.show .status-title{opacity:1; transform:translateY(0)}
+
+  /* Tab content + card entrance motion */
+  @keyframes tabIn{from{opacity:0; transform:translateY(10px)} to{opacity:1; transform:translateY(0)}}
+  #list, #logList, #doneList, #repsList{animation:tabIn .3s ease}
+  @keyframes cardIn{from{opacity:0; transform:translateY(10px)} to{opacity:1; transform:translateY(0)}}
+  .card{animation:cardIn .35s ease both}
+  .tab{transition:background .2s, color .2s, border-color .2s}
+
+  /* Admin reps overview */
+  .rep-card{background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:14px 16px; margin-bottom:10px; cursor:pointer}
+  .rep-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px}
+  .rep-head b{font-size:16px}
+  .rep-total{font-size:12px; color:var(--mut); background:var(--bg); border:1px solid var(--line);
+    border-radius:20px; padding:3px 10px; white-space:nowrap}
+  .rep-money{display:flex; gap:14px; font-size:12px; color:var(--mut); flex-wrap:wrap}
+  .rep-money b{color:var(--ink); font-size:13px; margin-inline-start:3px}
+  .rep-money .net b{color:var(--go)}
+  .rep-details{margin-top:12px; padding-top:12px; border-top:1px solid var(--line); animation:tabIn .25s ease}
+  .rep-status-row{display:flex; justify-content:space-between; font-size:13px; padding:5px 0; color:var(--mut)}
+  .rep-status-row b{color:var(--ink)}
 </style>
 </head>
 <body>
@@ -233,6 +274,80 @@
     });
   }
 
+  /* ===== شاشة تأكيد مخصصة لكل حالة، بالإضافة لاهتزاز خفيف لو الجهاز بيدعمه ===== */
+  const STATUS_CONFIRM = {
+    'تم التسليم':   {color:'go',      icon:'✓',  title:'تم التسليم بنجاح',              vibrate:[40,40,40]},
+    'رفض و رفض':    {color:'no',      icon:'✕',  title:'تم تسجيل رفض الطلب',            vibrate:[80]},
+    'رفض و دفع':    {color:'partial', icon:'💸', title:'تم تسجيل الرفض مع تحصيل مصاريف', vibrate:[40,40,40]},
+    'تهرب':         {color:'dodge',   icon:'🏃', title:'تم تسجيل حالة تهرب',            vibrate:[80]},
+    'لا يرد':       {color:'neutral', icon:'🔇', title:'تم تسجيل: لا يرد',              vibrate:[40]},
+    'لاغي':         {color:'cancel',  icon:'🚫', title:'تم إلغاء الطلب',                vibrate:[80]},
+    'تأجيل':        {color:'wait',    icon:'⏳', title:'تم تأجيل الطلب',                vibrate:[40]}
+  };
+
+  function showStatusConfirm(status){
+    const meta = STATUS_CONFIRM[status];
+    if(!meta) return;
+    if(navigator.vibrate){ try{ navigator.vibrate(meta.vibrate); }catch(e){} }
+    const overlay = document.createElement('div');
+    overlay.className = 'status-overlay';
+    overlay.innerHTML =
+      '<div class="status-circle s-'+meta.color+'"><span>'+meta.icon+'</span></div>'+
+      '<div class="status-title">'+esc(meta.title)+'</div>';
+    document.body.appendChild(overlay);
+    requestAnimationFrame(function(){ overlay.classList.add('show'); });
+    setTimeout(function(){
+      overlay.classList.remove('show');
+      setTimeout(function(){ overlay.remove(); }, 300);
+    }, 1300);
+  }
+
+  /* ===== ريفرش تلقائي كل 15 ثانية، بس لما التاب ظاهر، وبهدوء (silent) =====
+     بيتوقف تمامًا لو التاب مخفي أو المستخدم بيكتب في حقل إدخال، عشان
+     ما نوقفوش عليه شغله أو نستهلك quota من غير داعي. */
+  let pollTimer = null;
+  let lastPendingRows = [];
+
+  function startPolling(){
+    stopPolling();
+    pollTimer = setInterval(silentRefresh, 15000);
+  }
+  function stopPolling(){
+    if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  function silentRefresh(){
+    if(!MY_ID || document.hidden) return;
+    const activeEl = document.activeElement;
+    const isTyping = activeEl && (activeEl.tagName==='INPUT' || activeEl.tagName==='SELECT') &&
+      activeEl.id !== 'q' && activeEl.id !== 'q2';
+    if(isTyping) return;
+
+    callServer('getMyData', [MY_ID]).then(function(r){
+      if(!r.ok) return;
+      if(ROLE === 'rep'){
+        const newRows = (r.pending||[]).map(function(x){ return x.row; });
+        const added = newRows.filter(function(rw){ return lastPendingRows.indexOf(rw) === -1; });
+        if(lastPendingRows.length && added.length){
+          showToast('🚚 عندك '+added.length+' شحنة جديدة', 'success');
+          if(navigator.vibrate){ try{ navigator.vibrate(60); }catch(e){} }
+        }
+      }
+      const q1 = document.getElementById('q'), q2 = document.getElementById('q2');
+      const savedQ1 = q1 ? q1.value : '', savedQ2 = q2 ? q2.value : '';
+      render(r);
+      lastPendingRows = (r.pending||[]).map(function(x){ return x.row; });
+      const nq1 = document.getElementById('q'), nq2 = document.getElementById('q2');
+      if(nq1 && savedQ1){ nq1.value = savedQ1; filterPending(); }
+      if(nq2 && savedQ2){ nq2.value = savedQ2; filterDone(); }
+    }).catch(function(){ /* أخطاء الريفرش الصامت متتجاهلش عشان متزعجش المستخدم */ });
+  }
+
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden) stopPolling();
+    else if(MY_ID){ silentRefresh(); startPolling(); }
+  });
+
   function init(){
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) { MY_ID = saved; load(); }
@@ -243,9 +358,9 @@
     app.innerHTML =
       '<div class="login-box">'+
         '<h1>نظام الشحن</h1>'+
-        '<p>أدخل رقم التليجرام بتاعك (ID) مرة واحدة بس، والسيستم هيفتكره بعد كده.<br>'+
-        'لو مش عارفه، ابعت رسالة لـ @userinfobot وهيديهولك.</p>'+
-        '<input id="idInput" inputmode="numeric" placeholder="مثال: 6070447325">'+
+        '<p>أدخل الـ ID بتاعك مرة واحدة بس، والسيستم هيفتكره بعد كده.<br>'+
+        'لو مش عارف الـ ID بتاعك، اسأل الأدمن وهيديهولك.</p>'+
+        '<input id="idInput" inputmode="numeric" placeholder="اكتب الـ ID هنا">'+
         '<button onclick="tryLogin()">دخول</button>'+
         '<div class="err">'+(err?esc(err):'')+'</div>'+
       '</div>';
@@ -261,6 +376,8 @@
           try{ localStorage.setItem(STORAGE_KEY, val); }catch(e){}
           MY_ID = val;
           render(r);
+          lastPendingRows = (r.pending||[]).map(function(x){ return x.row; });
+          startPolling();
         } else { showLogin(r.error || 'الرقم مش موجود في السيستم'); }
       })
       .catch(function(e){ showLogin('خطأ: '+e.message); });
@@ -269,14 +386,19 @@
   function switchAccount(){
     try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
     MY_ID = '';
+    stopPolling();
     showLogin();
   }
 
   function load(){
     callServer('getMyData', [MY_ID])
       .then(function(r){
-        if(r.ok) render(r);
-        else { try{localStorage.removeItem(STORAGE_KEY);}catch(e){} showLogin(r.error); }
+        if(r.ok){
+          render(r);
+          lastPendingRows = (r.pending||[]).map(function(x){ return x.row; });
+          startPolling();
+        }
+        else { try{localStorage.removeItem(STORAGE_KEY);}catch(e){} stopPolling(); showLogin(r.error); }
       })
       .catch(function(e){
         app.innerHTML = '<div class="center"><b>خطأ في الاتصال</b>'+esc(e.message)+'</div>';
@@ -312,6 +434,7 @@
     html += '<div class="tabs">'+
       '<button class="tab '+(MAIN_TAB==='pending'?'active':'')+'" onclick="switchMain(\'pending\')">'+tab1Label+'</button>'+
       '<button class="tab '+(MAIN_TAB==='done'?'active':'')+'" onclick="switchMain(\'done\')">'+tab2Label+'</button>'+
+      (d.role==='admin' ? '<button class="tab '+(MAIN_TAB==='reps'?'active':'')+'" onclick="switchMain(\'reps\')">المناديب</button>' : '')+
       '</div>';
 
     if(d.role==='admin' && MAIN_TAB==='pending' && s.noCode>0){
@@ -345,6 +468,12 @@
       return;
     }
 
+    if(MAIN_TAB === 'reps' && ROLE === 'admin'){
+      body.innerHTML = '<div id="repsList"></div>';
+      renderRepsTab(document.getElementById('repsList'));
+      return;
+    }
+
     if(ROLE === 'admin'){
       body.innerHTML =
         '<div class="tabs">'+
@@ -360,9 +489,63 @@
       if(!DONE.length){
         list.innerHTML = '<div class="center"><b>لسه مفيش حاجة منفّذة</b>هتظهر هنا أول ما تحدّد حالة أي شحنة.</div>';
       } else {
-        list.innerHTML = DONE.map(x => card(x, ROLE, false)).join('');
+        list.innerHTML = DONE.map(function(x,i){ return card(x, ROLE, false, i); }).join('');
       }
     }
+  }
+
+  /* ===== نفس منطق حساب أثر الحالة على التحصيل/العمولة اللي في Code.gs،
+     مستخدمة هنا بس لعرض ملخص لكل مندوب من غير ما نضيف نداء سيرفر جديد ===== */
+  function moneyEffectJS(status, amount, commission, paidAmt){
+    amount = Number(amount)||0; commission = Number(commission)||0; paidAmt = Number(paidAmt)||0;
+    switch(status){
+      case 'تم التسليم':   return {collected:amount, commission:commission};
+      case 'رفض و رفض':    return {collected:0, commission:commission};
+      case 'رفض و دفع':    return {collected:paidAmt, commission:commission};
+      case 'تهرب':         return {collected:0, commission:commission};
+      default:             return {collected:0, commission:0};
+    }
+  }
+
+  function renderRepsTab(container){
+    if(!container) return;
+    if(!REPS.length){
+      container.innerHTML = '<div class="center"><b>لسه مفيش مناديب</b>ضيف مناديب في شيت Reps.</div>';
+      return;
+    }
+    const all = PENDING.concat(DONE);
+    container.innerHTML = REPS.map(function(rep){
+      const items = all.filter(function(x){ return String(x.repId) === String(rep.id); });
+      const pendingCount = items.filter(function(x){ return !x.status || x.status === 'جديد'; }).length;
+      const statusCounts = {};
+      Object.keys(STATUS_META).forEach(function(st){ statusCounts[st] = 0; });
+      let collected = 0, commission = 0;
+      items.forEach(function(x){
+        if(x.status && STATUS_META[x.status]) statusCounts[x.status]++;
+        const eff = moneyEffectJS(x.status, x.amount, x.commission, x.paidAmt);
+        collected += eff.collected; commission += eff.commission;
+      });
+      const net = collected - commission;
+      const detailsRows = '<div class="rep-status-row"><span>قيد التنفيذ</span><b>'+pendingCount+'</b></div>'+
+        Object.keys(STATUS_META).map(function(st){
+          return '<div class="rep-status-row"><span>'+STATUS_META[st].label+'</span><b>'+statusCounts[st]+'</b></div>';
+        }).join('');
+
+      return '<div class="rep-card" onclick="toggleRepDetails(this)">'+
+        '<div class="rep-head"><b>'+esc(rep.name)+'</b><span class="rep-total">'+items.length+' شحنة</span></div>'+
+        '<div class="rep-money">'+
+          '<span>تحصيل <b>'+collected+' ج</b></span>'+
+          '<span>عمولة <b>'+commission+' ج</b></span>'+
+          '<span class="net">صافي <b>'+net+' ج</b></span>'+
+        '</div>'+
+        '<div class="rep-details" hidden>'+detailsRows+'</div>'+
+      '</div>';
+    }).join('');
+  }
+
+  function toggleRepDetails(el){
+    const d = el.querySelector('.rep-details');
+    if(d) d.hidden = !d.hidden;
   }
 
   function renderSubBody(){
@@ -424,7 +607,7 @@
       return;
     }
     const filtered = !q ? PENDING : PENDING.filter(x => matchQ(x, q));
-    list.innerHTML = filtered.length ? filtered.map(x => card(x, ROLE, true)).join('')
+    list.innerHTML = filtered.length ? filtered.map(function(x,i){ return card(x, ROLE, true, i); }).join('')
       : '<div class="center"><b>مفيش نتائج</b>جرّب كلمة بحث تانية.</div>';
   }
 
@@ -436,7 +619,7 @@
     let items = DONE;
     if(STATUS_FILTER !== 'all') items = items.filter(x => x.status === STATUS_FILTER);
     if(q) items = items.filter(x => matchQ(x, q));
-    list.innerHTML = items.length ? items.map(x => card(x, ROLE, true)).join('')
+    list.innerHTML = items.length ? items.map(function(x,i){ return card(x, ROLE, true, i); }).join('')
       : '<div class="center"><b>مفيش نتائج</b></div>';
   }
 
@@ -474,15 +657,16 @@
       });
   }
 
-  function card(x, role, showActions){
+  function card(x, role, showActions, idx){
     const meta = STATUS_META[x.status] || {cls:'', label:'جديد'};
+    const delayStyle = 'style="animation-delay:'+((idx||0)*35)+'ms"';
     const codeBlock = x.code
       ? '<span class="code mono">'+esc(x.code)+'</span>'
       : (role==='admin'
           ? '<button class="genone" onclick="genOne(this,'+x.row+')">توليد كود</button>'
           : '<span class="code empty mono">— بدون كود —</span>');
 
-    let h = '<div class="card s-'+meta.cls+'">'+
+    let h = '<div class="card s-'+meta.cls+'" '+delayStyle+'>'+
       '<div class="top">'+codeBlock+'<span class="pill '+meta.cls+'">'+meta.label+'</span></div>'+
       '<div class="nameRow"><span class="name">'+esc(x.customer)+'</span></div>';
 
@@ -557,7 +741,7 @@
     allBtns.forEach(function(b){ b.disabled = true; });
     callServer('updateStatus', [MY_ID, row, status, reason, paidAmt])
       .then(function(r){
-        if(r.ok){ load(); }
+        if(r.ok){ showStatusConfirm(status); load(); }
         else { showToast(r.error, 'error'); allBtns.forEach(function(b){ b.disabled = false; }); }
       })
       .catch(function(e){
