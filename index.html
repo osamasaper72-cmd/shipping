@@ -194,6 +194,66 @@
   .rep-details{margin-top:12px; padding-top:12px; border-top:1px solid var(--line); animation:tabIn .25s ease}
   .rep-status-row{display:flex; justify-content:space-between; font-size:13px; padding:5px 0; color:var(--mut)}
   .rep-status-row b{color:var(--ink)}
+
+  /* لون التسليم الجزئي */
+  :root{ --partdel:#38bdf8; }
+  .card.s-partdel::before{background:var(--partdel)}
+  .pill.partdel{background:#0e2a3a; color:var(--partdel)}
+  .acts .partdel{border-color:#1f4a5e; color:var(--partdel)}
+  .status-circle.s-partdel{background:#0e2a3a; color:var(--partdel); box-shadow:0 0 0 10px #0e2a3a66}
+
+  /* صف الرقم + أزرار الاتصال الكبيرة */
+  .contactRow{display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap}
+  .contactRow .phoneNum{font-weight:800; font-size:16px; font-family:'IBM Plex Mono',monospace;
+    color:var(--ink); flex:1; min-width:110px}
+  .cbtn{display:inline-flex; align-items:center; justify-content:center; gap:5px;
+    height:40px; padding:0 14px; border-radius:11px; text-decoration:none; font-family:inherit;
+    font-weight:700; font-size:13px; border:0; cursor:pointer}
+  .cbtn svg{width:18px; height:18px; display:block}
+  .cbtn.call{background:#16352b; color:var(--go)}
+  .cbtn.wa{background:#0b3d2e; color:#25d366}
+  .cbtn.sms{background:#1a2b3d; color:#5b9bd5}
+  .cbtn.copy{background:var(--bg); color:var(--mut); border:1px solid var(--line)}
+
+  /* حركة اختفاء الكارت لما تتحدد حالته */
+  @keyframes cardOut{
+    from{opacity:1; transform:translateX(0); max-height:600px}
+    to{opacity:0; transform:translateX(-40px); max-height:0; margin:0; padding-top:0; padding-bottom:0}
+  }
+  .card.removing{animation:cardOut .45s ease forwards; overflow:hidden}
+
+  /* Pull to refresh */
+  .ptr{position:fixed; top:0; left:0; right:0; display:flex; align-items:center; justify-content:center;
+    height:0; overflow:hidden; color:var(--go); font-size:22px; z-index:50; transition:height .15s}
+  .ptr.spin{animation:ptrSpin .8s linear infinite}
+  @keyframes ptrSpin{to{transform:rotate(360deg)}}
+
+  /* Empty states */
+  .empty-ill{font-size:52px; margin-bottom:12px; opacity:.85}
+
+  /* Delivery choice sheet */
+  .choice-overlay{position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:9998;
+    display:flex; align-items:flex-end; justify-content:center}
+  .choice-sheet{background:var(--card); border-top-left-radius:20px; border-top-right-radius:20px;
+    border:1px solid var(--line); padding:20px 18px 26px; width:100%; max-width:440px;
+    animation:sheetUp .3s cubic-bezier(.34,1.2,.64,1)}
+  @keyframes sheetUp{from{transform:translateY(100%)} to{transform:translateY(0)}}
+  .choice-sheet h3{margin:0 0 4px; font-size:17px; text-align:center}
+  .choice-sheet p{margin:0 0 16px; font-size:13px; color:var(--mut); text-align:center}
+  .choice-btn{width:100%; border:0; border-radius:12px; padding:15px; font-family:inherit;
+    font-weight:700; font-size:15px; margin-bottom:10px; cursor:pointer; display:flex;
+    align-items:center; justify-content:center; gap:8px}
+  .choice-btn.full{background:var(--go); color:#06241c}
+  .choice-btn.part{background:#0e2a3a; color:var(--partdel); border:1px solid #1f4a5e}
+  .choice-btn.cancel{background:var(--bg); color:var(--mut); border:1px solid var(--line); font-weight:600}
+
+  /* Day counter */
+  .day-counter{background:linear-gradient(135deg, #16352b, #14283a); border:1px solid var(--line);
+    border-radius:14px; padding:12px 16px; margin-bottom:14px; display:flex; align-items:center;
+    justify-content:space-between}
+  .day-counter .dc-text{font-size:14px; font-weight:700}
+  .day-counter .dc-text span{color:var(--go)}
+  .day-counter .dc-emoji{font-size:22px}
 </style>
 </head>
 <body>
@@ -207,6 +267,9 @@
   ============================================================ */
   const API_URL = 'https://script.google.com/macros/s/AKfycbxhXE0bzdqCxuIep9BEt7kMtYxYp7p7Ehs0Fn70it9jpHy_93krqQnZFHMhigp-4mkh/exec';
 
+  /* لما تقرر اسم الشركة، غيّره من هنا بس — بيتستخدم في رسائل الواتساب و SMS */
+  const COMPANY_NAME = 'الشركة';
+
   const STORAGE_KEY = 'shipsys_uid';
   const STORAGE_KEY_PIN = 'shipsys_pin';
   let REPS = [], PENDING = [], DONE = [], BALANCES = [];
@@ -218,6 +281,7 @@
 
   const STATUS_META = {
     'تم التسليم':   {cls:'go',      label:'✓ تم التسليم'},
+    'تسليم جزئي':   {cls:'partdel', label:'◐ تسليم جزئي'},
     'رفض و رفض':    {cls:'no',      label:'✕ رفض'},
     'رفض و دفع':    {cls:'partial', label:'💸 رفض ودفع'},
     'تهرب':         {cls:'dodge',   label:'🏃 تهرب'},
@@ -282,6 +346,7 @@
   /* ===== شاشة تأكيد مخصصة لكل حالة، بالإضافة لاهتزاز خفيف لو الجهاز بيدعمه ===== */
   const STATUS_CONFIRM = {
     'تم التسليم':   {color:'go',      icon:'✓',  title:'تم التسليم بنجاح',              vibrate:[40,40,40]},
+    'تسليم جزئي':   {color:'partdel', icon:'◐',  title:'تم تسجيل تسليم جزئي',           vibrate:[40,40,40]},
     'رفض و رفض':    {color:'no',      icon:'✕',  title:'تم تسجيل رفض الطلب',            vibrate:[80]},
     'رفض و دفع':    {color:'partial', icon:'💸', title:'تم تسجيل الرفض مع تحصيل مصاريف', vibrate:[40,40,40]},
     'تهرب':         {color:'dodge',   icon:'🏃', title:'تم تسجيل حالة تهرب',            vibrate:[80]},
@@ -416,7 +481,57 @@
     let p = String(phone).replace(/\D/g,'');
     if(p.indexOf('0') === 0) p = p.substring(1);
     if(p.indexOf('20') !== 0) p = '20'+p;
-    return 'https://wa.me/'+p;
+    const msg = encodeURIComponent('شحنتك من ' + COMPANY_NAME + ' وصلت، والمندوب في الطريق ليك 🚚');
+    return 'https://wa.me/'+p+'?text='+msg;
+  }
+
+  function smsLink(phone){
+    const p = String(phone).replace(/[^\d+]/g,'');
+    const msg = encodeURIComponent('شحنتك من ' + COMPANY_NAME + ' وصلت، والمندوب في الطريق ليك.');
+    return 'sms:'+p+'?body='+msg;
+  }
+
+  function copyText(txt, btn){
+    const done = function(){
+      if(navigator.vibrate){ try{ navigator.vibrate(30); }catch(e){} }
+      showToast('اتنسخ ✅', 'success');
+    };
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(done).catch(function(){ fallbackCopy(txt); done(); });
+    } else { fallbackCopy(txt); done(); }
+  }
+  function fallbackCopy(txt){
+    const ta = document.createElement('textarea');
+    ta.value = txt; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); }catch(e){}
+    ta.remove();
+  }
+
+  /* أيقونات SVG (اتصال، واتساب، SMS، نسخ) — إنلاين عشان تحمّل فوري بدون طلبات خارجية */
+  const ICON_CALL = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.2.2 2.4.6 3.6.1.4 0 .8-.2 1l-2.3 2.2z"/></svg>';
+  const ICON_WA = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 00-8.6 15l-1.3 4.7 4.8-1.3A10 10 0 1012 2zm5.8 14.2c-.2.7-1.4 1.3-2 1.4-.5.1-1.2.1-1.9-.1-.4-.1-1-.3-1.7-.6-3-1.3-4.9-4.3-5.1-4.5-.1-.2-1.2-1.6-1.2-3s.7-2.1 1-2.4c.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.8 2c.1.2.1.3 0 .5l-.4.5-.3.3c-.2.2-.3.4-.2.6.2.4.8 1.3 1.6 2 1.1.9 1.9 1.2 2.2 1.3.2.1.4.1.6-.1l.8-1c.2-.2.4-.2.6-.1l1.9.9c.2.1.4.2.4.3.1.2.1.9-.1 1.6z"/></svg>';
+  const ICON_SMS = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16c1.1 0 2 .9 2 2v10c0 1.1-.9 2-2 2H8l-4 4V6c0-1.1.9-2 2-2zm3 6h2v2H7v-2zm4 0h2v2h-2v-2zm4 0h2v2h-2v-2z"/></svg>';
+  const ICON_COPY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>';
+
+  /* فتح اختيار نوع التسليم: كامل أو جزئي */
+  function openDelivery(btn, row){
+    const overlay = document.createElement('div');
+    overlay.className = 'choice-overlay';
+    overlay.innerHTML =
+      '<div class="choice-sheet">'+
+        '<h3>نوع التسليم</h3>'+
+        '<p>اختار حالة تسليم الطلب</p>'+
+        '<button class="choice-btn full">✓ تم التسليم بالكامل</button>'+
+        '<button class="choice-btn part">◐ تسليم جزئي</button>'+
+        '<button class="choice-btn cancel">إلغاء</button>'+
+      '</div>';
+    document.body.appendChild(overlay);
+    const close = function(){ overlay.remove(); };
+    overlay.onclick = function(e){ if(e.target === overlay) close(); };
+    overlay.querySelector('.full').onclick = function(){ close(); setStatus(btn, row, 'تم التسليم'); };
+    overlay.querySelector('.part').onclick = function(){ close(); setStatus(btn, row, 'تسليم جزئي'); };
+    overlay.querySelector('.cancel').onclick = close;
   }
 
   function render(d){
@@ -429,6 +544,17 @@
     const s = d.stats;
     html += '<div class="stats2">'+
       stat(s.pendingCount,'قيد التنفيذ')+stat(s.doneCount,'منفّذ')+'</div>';
+
+    // عدّاد اليوم للمندوب: كام خلّص من إجمالي شحناته
+    if(d.role==='rep'){
+      const total = s.pendingCount + s.doneCount;
+      if(total > 0){
+        const emoji = s.pendingCount === 0 ? '🎉' : '🚚';
+        const msg = s.pendingCount === 0 ? 'خلّصت كل شحناتك! 👏' :
+          'خلّصت <span>'+s.doneCount+'</span> من '+total+' — فاضل '+s.pendingCount;
+        html += '<div class="day-counter"><div class="dc-text">'+msg+'</div><div class="dc-emoji">'+emoji+'</div></div>';
+      }
+    }
 
     html += '<div class="money3">'+
       '<div class="c1"><span>التحصيل</span><b>'+s.collected+' ج</b></div>'+
@@ -518,7 +644,7 @@
       body.innerHTML = '<div id="doneList" class="'+animClass+'"></div>';
       const list = document.getElementById('doneList');
       if(!DONE.length){
-        list.innerHTML = '<div class="center"><b>لسه مفيش حاجة منفّذة</b>هتظهر هنا أول ما تحدّد حالة أي شحنة.</div>';
+        list.innerHTML = '<div class="center"><div class="empty-ill">✅</div><b>لسه مفيش حاجة منفّذة</b>هتظهر هنا أول ما تحدّد حالة أي شحنة.</div>';
       } else {
         list.innerHTML = DONE.map(function(x,i){ return card(x, ROLE, false, i); }).join('');
       }
@@ -531,6 +657,7 @@
     amount = Number(amount)||0; commission = Number(commission)||0; paidAmt = Number(paidAmt)||0;
     switch(status){
       case 'تم التسليم':   return {collected:amount, commission:commission};
+      case 'تسليم جزئي':   return {collected:paidAmt, commission:commission};
       case 'رفض و رفض':    return {collected:0, commission:commission};
       case 'رفض و دفع':    return {collected:paidAmt, commission:commission};
       case 'تهرب':         return {collected:0, commission:commission};
@@ -541,7 +668,7 @@
   function renderRepsTab(container){
     if(!container) return;
     if(!REPS.length){
-      container.innerHTML = '<div class="center"><b>لسه مفيش مناديب</b>ضيف مناديب في شيت Reps.</div>';
+      container.innerHTML = '<div class="center"><div class="empty-ill">👥</div><b>لسه مفيش مناديب</b>ضيف مناديب في شيت Reps.</div>';
       return;
     }
     const all = PENDING.concat(DONE);
@@ -597,7 +724,7 @@
 
   function renderBalances(container){
     if(!BALANCES.length){
-      container.innerHTML = '<div class="center"><b>كله مقفول 👌</b>مفيش حد عليه فلوس لسه.</div>';
+      container.innerHTML = '<div class="center"><div class="empty-ill">👌</div><b>كله مقفول</b>مفيش حد عليه فلوس لسه.</div>';
       return;
     }
     container.innerHTML = BALANCES.map(b =>
@@ -633,13 +760,15 @@
     const list = document.getElementById('list');
     if(!list) return;
     if(!PENDING.length){
-      list.innerHTML = '<div class="center"><b>مفيش شحنات قيد التنفيذ</b>'+
+      list.innerHTML = '<div class="center"><div class="empty-ill">📦</div><b>مفيش شحنات قيد التنفيذ</b>'+
         (ROLE==='admin'?'الصق بيانات الوكيل في الشيت وارجع اعمل تحديث.':'هتظهر شحناتك أول ما تتسند ليك.')+'</div>';
       return;
     }
-    const filtered = !q ? PENDING : PENDING.filter(x => matchQ(x, q));
+    // FIFO: الأقدم الأول. الـ backend بيرجّعهم الأحدث الأول، فبنعكس.
+    const ordered = PENDING.slice().reverse();
+    const filtered = !q ? ordered : ordered.filter(x => matchQ(x, q));
     list.innerHTML = filtered.length ? filtered.map(function(x,i){ return card(x, ROLE, true, i); }).join('')
-      : '<div class="center"><b>مفيش نتائج</b>جرّب كلمة بحث تانية.</div>';
+      : '<div class="center"><div class="empty-ill">🔍</div><b>مفيش نتائج</b>جرّب كلمة بحث تانية.</div>';
   }
 
   function filterDone(){
@@ -651,7 +780,7 @@
     if(STATUS_FILTER !== 'all') items = items.filter(x => x.status === STATUS_FILTER);
     if(q) items = items.filter(x => matchQ(x, q));
     list.innerHTML = items.length ? items.map(function(x,i){ return card(x, ROLE, true, i); }).join('')
-      : '<div class="center"><b>مفيش نتائج</b></div>';
+      : '<div class="center"><div class="empty-ill">🔍</div><b>مفيش نتائج</b></div>';
   }
 
   function matchQ(x, q){
@@ -702,13 +831,17 @@
       '<div class="nameRow"><span class="name">'+esc(x.customer)+'</span></div>';
 
     if(x.phone){
-      h += '<div class="phoneRow"><span class="phoneNum">'+esc(x.phone)+'</span>'+
-        '<a class="phoneBtn call" href="tel:'+esc(x.phone)+'">📞</a>'+
-        '<a class="phoneBtn wa" href="'+waLink(x.phone)+'" target="_blank">💬</a></div>';
+      h += '<div class="contactRow">'+
+        '<span class="phoneNum">'+esc(x.phone)+'</span>'+
+        '<a class="cbtn call" href="tel:'+esc(x.phone)+'">'+ICON_CALL+' اتصال</a>'+
+        '<a class="cbtn wa" href="'+waLink(x.phone)+'" target="_blank">'+ICON_WA+' واتساب</a>'+
+        '<a class="cbtn sms" href="'+smsLink(x.phone)+'">'+ICON_SMS+' SMS</a>'+
+        '<button class="cbtn copy" onclick="copyText(\''+esc(x.phone)+'\',this)">'+ICON_COPY+'</button>'+
+      '</div>';
     }
 
     h += '<div class="meta">'+
-      (x.address?'📍 '+esc(x.address)+'<br>':'')+
+      (x.address?'📍 '+esc(x.address)+' <button class="cbtn copy" style="height:26px;padding:0 8px;font-size:11px" onclick="copyText(\''+esc(x.address).replace(/'/g,"\\'")+'\',this)">نسخ</button><br>':'')+
       '<span class="amt">💰 '+esc(x.amount)+' ج</span></div>';
 
     if(role==='admin'){
@@ -725,7 +858,7 @@
 
     if(showActions){
       h += '<div class="acts">'+
-        '<button class="go" onclick="setStatus(this,'+x.row+',\'تم التسليم\')">تم التسليم</button>'+
+        '<button class="go full" onclick="openDelivery(this,'+x.row+')">✓ تم التسليم</button>'+
         '<button class="no" onclick="setStatus(this,'+x.row+',\'رفض و رفض\')">رفض و رفض</button>'+
         '<button class="partial" onclick="setStatus(this,'+x.row+',\'رفض و دفع\')">رفض و دفع</button>'+
         '<button class="dodge" onclick="setStatus(this,'+x.row+',\'تهرب\')">تهرب</button>'+
@@ -765,14 +898,25 @@
       const val = prompt('اكتب مصاريف الشحن اللي العميل دفعها (رقم بس):');
       if(val === null) return;
       paidAmt = Number(val) || 0;
+    } else if(status === 'تسليم جزئي'){
+      const val = prompt('اكتب المبلغ اللي العميل دفعه فعليًا (رقم بس):');
+      if(val === null) return;
+      paidAmt = Number(val) || 0;
     } else if(status !== 'تم التسليم'){
       reason = prompt('ملاحظة (اختياري):') || '';
     }
-    const allBtns = btn.parentElement.querySelectorAll('button');
+    if(navigator.vibrate){ try{ navigator.vibrate(30); }catch(e){} }
+    const cardEl = btn.closest('.card');
+    const allBtns = cardEl ? cardEl.querySelectorAll('button') : [btn];
     allBtns.forEach(function(b){ b.disabled = true; });
     callServer('updateStatus', [MY_ID, row, status, reason, paidAmt, MY_PIN])
       .then(function(r){
-        if(r.ok){ showStatusConfirm(status); load(); }
+        if(r.ok){
+          showStatusConfirm(status);
+          // حركة اختفاء الكارت قبل إعادة التحميل
+          if(cardEl && MAIN_TAB === 'pending'){ cardEl.classList.add('removing'); }
+          setTimeout(function(){ load(); }, 450);
+        }
         else { showToast(r.error, 'error'); allBtns.forEach(function(b){ b.disabled = false; }); }
       })
       .catch(function(e){
@@ -780,6 +924,45 @@
         allBtns.forEach(function(b){ b.disabled = false; });
       });
   }
+
+  /* ===== Pull to refresh ===== */
+  (function setupPullToRefresh(){
+    let startY = 0, pulling = false, ptrEl = null;
+    const THRESHOLD = 70;
+    function getPtr(){
+      if(!ptrEl){
+        ptrEl = document.createElement('div');
+        ptrEl.className = 'ptr';
+        ptrEl.textContent = '↻';
+        document.body.appendChild(ptrEl);
+      }
+      return ptrEl;
+    }
+    document.addEventListener('touchstart', function(e){
+      if(window.scrollY === 0 && MY_ID){ startY = e.touches[0].clientY; pulling = true; }
+    }, {passive:true});
+    document.addEventListener('touchmove', function(e){
+      if(!pulling) return;
+      const dy = e.touches[0].clientY - startY;
+      if(dy > 0){
+        const h = Math.min(dy * 0.5, 80);
+        getPtr().style.height = h + 'px';
+      }
+    }, {passive:true});
+    document.addEventListener('touchend', function(e){
+      if(!pulling) return;
+      pulling = false;
+      const ptr = getPtr();
+      const h = parseInt(ptr.style.height || '0', 10);
+      if(h >= THRESHOLD){
+        ptr.classList.add('spin');
+        silentRefresh();
+        setTimeout(function(){ ptr.classList.remove('spin'); ptr.style.height = '0px'; }, 800);
+      } else {
+        ptr.style.height = '0px';
+      }
+    }, {passive:true});
+  })();
 
   init();
 </script>
