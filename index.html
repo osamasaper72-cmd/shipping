@@ -255,6 +255,24 @@
   .day-counter .dc-text span{color:var(--go)}
   .day-counter .dc-emoji{font-size:22px}
 
+  /* زرار تحديث الحالة يدويًا (طوارئ) للأدمن */
+  .override-wrap{margin-top:10px}
+  .override-btn{width:100%; border:1px dashed #52341f; background:#2a1f14; color:var(--wait);
+    border-radius:10px; padding:11px; font-family:inherit; font-weight:700; font-size:13px}
+
+  /* شاشة تحميل بطابع الشحن */
+  .loading-scene{display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:70px 20px; color:var(--mut)}
+  .loading-road{position:relative; width:120px; height:34px; margin-bottom:14px; overflow:hidden}
+  .loading-truck{font-size:32px; position:absolute; top:0; left:50%; margin-left:-16px;
+    animation:truckBounce 1.2s ease-in-out infinite}
+  @keyframes truckBounce{0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)}}
+  .loading-dashes{position:absolute; bottom:4px; left:0; right:0; height:3px; border-radius:2px;
+    background:repeating-linear-gradient(90deg, var(--line) 0 10px, transparent 10px 20px);
+    animation:dashMove .5s linear infinite}
+  @keyframes dashMove{from{background-position:0 0} to{background-position:-20px 0}}
+  .loading-scene b{font-size:14px; color:var(--ink); font-weight:700}
+
   /* بانر انقطاع الإنترنت */
   .offline-banner{position:fixed; top:0; left:0; right:0; background:var(--no); color:#2a0a0a;
     text-align:center; font-size:13px; font-weight:800; padding:10px; z-index:10001;
@@ -263,7 +281,7 @@
 </style>
 </head>
 <body>
-  <div id="app"><div class="center">جارِ التحميل…</div></div>
+  <div id="app"><div class="loading-scene"><div class="loading-road"><div class="loading-dashes"></div><div class="loading-truck">🚚</div></div><b>جارِ التحميل…</b></div></div>
   <div id="offlineBanner" class="offline-banner">📡 مفيش اتصال بالإنترنت — بنحاول نرجعلك أول ما النت يرجع</div>
 
 <script>
@@ -285,6 +303,11 @@
   const app = document.getElementById('app');
   const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  function loadingScene(text){
+    return '<div class="loading-scene"><div class="loading-road"><div class="loading-dashes"></div>'+
+      '<div class="loading-truck">🚚</div></div><b>'+esc(text)+'</b></div>';
+  }
 
   const STATUS_META = {
     'تم التسليم':   {cls:'go',      label:'✓ تم التسليم'},
@@ -419,7 +442,7 @@
     if(!MY_ID || document.hidden) return;
     const activeEl = document.activeElement;
     const isTyping = activeEl && (activeEl.tagName==='INPUT' || activeEl.tagName==='SELECT') &&
-      activeEl.id !== 'q' && activeEl.id !== 'q2';
+      activeEl.id !== 'q' && activeEl.id !== 'q2' && activeEl.id !== 'qa';
     if(isTyping) return;
 
     callServer('getMyData', [MY_ID, MY_PIN]).then(function(r){
@@ -432,13 +455,14 @@
           if(navigator.vibrate){ try{ navigator.vibrate(60); }catch(e){} }
         }
       }
-      const q1 = document.getElementById('q'), q2 = document.getElementById('q2');
-      const savedQ1 = q1 ? q1.value : '', savedQ2 = q2 ? q2.value : '';
+      const q1 = document.getElementById('q'), q2 = document.getElementById('q2'), qa = document.getElementById('qa');
+      const savedQ1 = q1 ? q1.value : '', savedQ2 = q2 ? q2.value : '', savedQa = qa ? qa.value : '';
       render(r);
       lastPendingRows = (r.pending||[]).map(function(x){ return x.row; });
-      const nq1 = document.getElementById('q'), nq2 = document.getElementById('q2');
+      const nq1 = document.getElementById('q'), nq2 = document.getElementById('q2'), nqa = document.getElementById('qa');
       if(nq1 && savedQ1){ nq1.value = savedQ1; filterPending(); }
       if(nq2 && savedQ2){ nq2.value = savedQ2; filterDone(); }
+      if(nqa && savedQa){ nqa.value = savedQa; filterAssigned(); }
     }).catch(function(){ /* أخطاء الريفرش الصامت متتجاهلش عشان متزعجش المستخدم */ });
   }
 
@@ -470,7 +494,7 @@
     const val = document.getElementById('idInput').value.trim();
     const pin = document.getElementById('pinInput').value.trim();
     if(!val){ showLogin('اكتب الرقم الأول'); return; }
-    app.innerHTML = '<div class="center">جارِ التحقق…</div>';
+    app.innerHTML = loadingScene('جارِ التحقق…');
     callServer('getMyData', [val, pin])
       .then(function(r){
         if(r.ok){
@@ -544,7 +568,7 @@
   const ICON_COPY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>';
 
   /* فتح اختيار نوع التسليم: كامل أو جزئي */
-  function openDelivery(btn, row){
+  function openDelivery(btn, row, adminOverride){
     const overlay = document.createElement('div');
     overlay.className = 'choice-overlay';
     overlay.innerHTML =
@@ -558,8 +582,8 @@
     document.body.appendChild(overlay);
     const close = function(){ overlay.remove(); };
     overlay.onclick = function(e){ if(e.target === overlay) close(); };
-    overlay.querySelector('.full').onclick = function(){ close(); setStatus(btn, row, 'تم التسليم'); };
-    overlay.querySelector('.part').onclick = function(){ close(); setStatus(btn, row, 'تسليم جزئي'); };
+    overlay.querySelector('.full').onclick = function(){ close(); setStatus(btn, row, 'تم التسليم', adminOverride); };
+    overlay.querySelector('.part').onclick = function(){ close(); setStatus(btn, row, 'تسليم جزئي', adminOverride); };
     overlay.querySelector('.cancel').onclick = close;
   }
 
@@ -593,8 +617,11 @@
 
     const tab1Label = 'قيد التنفيذ';
     const tab2Label = d.role==='admin' ? 'تم التنفيذ' : 'تم التسليم';
+    const unassignedCount = d.role==='admin' ? PENDING.filter(function(x){return !x.repId;}).length : 0;
+    const assignedCount = d.role==='admin' ? PENDING.filter(function(x){return !!x.repId;}).length : 0;
     html += '<div class="tabs" id="mainTabsBar">'+
-      '<button class="tab '+(MAIN_TAB==='pending'?'active':'')+'" data-tab="pending" onclick="switchMain(\'pending\')">'+tab1Label+'</button>'+
+      '<button class="tab '+(MAIN_TAB==='pending'?'active':'')+'" data-tab="pending" onclick="switchMain(\'pending\')">'+tab1Label+(d.role==='admin' && unassignedCount ? ' ('+unassignedCount+')':'')+'</button>'+
+      (d.role==='admin' ? '<button class="tab '+(MAIN_TAB==='assigned'?'active':'')+'" data-tab="assigned" onclick="switchMain(\'assigned\')">قيد التوصيل'+(assignedCount ? ' ('+assignedCount+')':'')+'</button>' : '')+
       '<button class="tab '+(MAIN_TAB==='done'?'active':'')+'" data-tab="done" onclick="switchMain(\'done\')">'+tab2Label+'</button>'+
       (d.role==='admin' ? '<button class="tab '+(MAIN_TAB==='reps'?'active':'')+'" data-tab="reps" onclick="switchMain(\'reps\')">المناديب</button>' : '')+
       '</div>';
@@ -616,7 +643,7 @@
   }
 
   function tabOrder(){
-    return ROLE==='admin' ? ['pending','done','reps'] : ['pending','done'];
+    return ROLE==='admin' ? ['pending','assigned','done','reps'] : ['pending','done'];
   }
 
   function switchMain(tab){
@@ -651,6 +678,14 @@
         '<input id="q" class="search" placeholder="بحث بالاسم أو الموبايل أو الكود" oninput="filterPending()">'+
         '<div id="list" class="'+animClass+'"></div>';
       filterPending();
+      return;
+    }
+
+    if(MAIN_TAB === 'assigned' && ROLE === 'admin'){
+      body.innerHTML =
+        '<input id="qa" class="search" placeholder="بحث بالاسم أو الموبايل أو الكود" oninput="filterAssigned()">'+
+        '<div id="assignedList" class="'+animClass+'"></div>';
+      filterAssigned();
       return;
     }
 
@@ -788,16 +823,33 @@
     const q = box ? box.value.trim() : '';
     const list = document.getElementById('list');
     if(!list) return;
-    if(!PENDING.length){
-      list.innerHTML = '<div class="center"><div class="empty-ill">📦</div><b>مفيش شحنات قيد التنفيذ</b>'+
+    const base = ROLE === 'admin' ? PENDING.filter(function(x){ return !x.repId; }) : PENDING;
+    if(!base.length){
+      list.innerHTML = '<div class="center"><div class="empty-ill">📦</div><b>مفيش شحنات محتاجة إسناد</b>'+
         (ROLE==='admin'?'الصق بيانات الوكيل في الشيت وارجع اعمل تحديث.':'هتظهر شحناتك أول ما تتسند ليك.')+'</div>';
       return;
     }
     // FIFO: الأقدم الأول. الـ backend بيرجّعهم الأحدث الأول، فبنعكس.
-    const ordered = PENDING.slice().reverse();
+    const ordered = base.slice().reverse();
+    const filtered = !q ? ordered : ordered.filter(x => matchQ(x, q));
+    list.innerHTML = filtered.length ? filtered.map(function(x,i){ return card(x, ROLE, ROLE !== 'admin', i); }).join('')
+      : '<div class="center"><div class="empty-ill">🔍</div><b>مفيش نتائج</b>جرّب كلمة بحث تانية.</div>';
+  }
+
+  function filterAssigned(){
+    const box = document.getElementById('qa');
+    const q = box ? box.value.trim() : '';
+    const list = document.getElementById('assignedList');
+    if(!list) return;
+    const base = PENDING.filter(function(x){ return !!x.repId; });
+    if(!base.length){
+      list.innerHTML = '<div class="center"><div class="empty-ill">🕐</div><b>لسه مفيش طلبات متسندة</b>اسند مندوب لأي طلب من "قيد التنفيذ".</div>';
+      return;
+    }
+    const ordered = base.slice().reverse();
     const filtered = !q ? ordered : ordered.filter(x => matchQ(x, q));
     list.innerHTML = filtered.length ? filtered.map(function(x,i){ return card(x, ROLE, true, i); }).join('')
-      : '<div class="center"><div class="empty-ill">🔍</div><b>مفيش نتائج</b>جرّب كلمة بحث تانية.</div>';
+      : '<div class="center"><div class="empty-ill">🔍</div><b>مفيش نتائج</b></div>';
   }
 
   function filterDone(){
@@ -846,6 +898,28 @@
       });
   }
 
+  function actsBlock(row, adminOverride){
+    const ov = adminOverride ? ',true' : '';
+    return '<div class="acts">'+
+      '<button class="go full" onclick="openDelivery(this,'+row+ov+')">✓ تم التسليم</button>'+
+      '<button class="no" onclick="setStatus(this,'+row+',\'رفض و رفض\''+ov+')">رفض و رفض</button>'+
+      '<button class="partial" onclick="setStatus(this,'+row+',\'رفض و دفع\''+ov+')">رفض و دفع</button>'+
+      '<button class="dodge" onclick="setStatus(this,'+row+',\'تهرب\''+ov+')">تهرب</button>'+
+      '<button class="neutral" onclick="setStatus(this,'+row+',\'لا يرد\''+ov+')">لا يرد</button>'+
+      '<button class="cancel" onclick="setStatus(this,'+row+',\'لاغي\''+ov+')">لاغي</button>'+
+      '<button class="wait full" onclick="setStatus(this,'+row+',\'تأجيل\''+ov+')">تأجيل</button>'+
+    '</div>';
+  }
+
+  function revealOverride(btn, row){
+    showConfirm('متأكد إنك عايز تغيّر الحالة بنفسك؟ ده هيتسجل إنه تغيير من الأدمن مش من المندوب.').then(function(ok){
+      if(!ok) return;
+      const wrap = document.getElementById('ovr-'+row);
+      if(!wrap) return;
+      wrap.innerHTML = actsBlock(row, true);
+    });
+  }
+
   function card(x, role, showActions, idx){
     const meta = STATUS_META[x.status] || {cls:'', label:'جديد'};
     const delayStyle = 'style="animation-delay:'+((idx||0)*35)+'ms"';
@@ -878,7 +952,7 @@
       REPS.forEach(r => opts += '<option value="'+esc(r.id)+'"'+
         (r.id===x.repId?' selected':'')+'>'+esc(r.name)+'</option>');
       h += '<div class="assign"><label>المندوب:</label>'+
-        '<select onchange="assign(this,'+x.row+', this.value)">'+opts+'</select></div>';
+        '<select data-prev="'+esc(x.repId||'')+'" onchange="assign(this,'+x.row+', this.value)">'+opts+'</select></div>';
       h += '<div class="commRow"><label>العمولة:</label>'+
         '<input type="number" value="'+esc(x.commission||0)+'" onchange="setComm(this,'+x.row+', this.value)"></div>';
     } else if(x.repName){
@@ -886,15 +960,13 @@
     }
 
     if(showActions){
-      h += '<div class="acts">'+
-        '<button class="go full" onclick="openDelivery(this,'+x.row+')">✓ تم التسليم</button>'+
-        '<button class="no" onclick="setStatus(this,'+x.row+',\'رفض و رفض\')">رفض و رفض</button>'+
-        '<button class="partial" onclick="setStatus(this,'+x.row+',\'رفض و دفع\')">رفض و دفع</button>'+
-        '<button class="dodge" onclick="setStatus(this,'+x.row+',\'تهرب\')">تهرب</button>'+
-        '<button class="neutral" onclick="setStatus(this,'+x.row+',\'لا يرد\')">لا يرد</button>'+
-        '<button class="cancel" onclick="setStatus(this,'+x.row+',\'لاغي\')">لاغي</button>'+
-        '<button class="wait full" onclick="setStatus(this,'+x.row+',\'تأجيل\')">تأجيل</button>'+
+      if(role === 'admin'){
+        h += '<div class="override-wrap" id="ovr-'+x.row+'">'+
+          '<button class="override-btn" onclick="revealOverride(this,'+x.row+')">⚠️ تحديث الحالة يدويًا (طوارئ)</button>'+
         '</div>';
+      } else {
+        h += actsBlock(x.row, false);
+      }
     }
 
     h += '</div>';
@@ -902,13 +974,26 @@
   }
 
   function assign(el, row, repId){
+    const prev = el.dataset.prev || '';
+    if(!repId && prev){
+      showConfirm('متأكد إنك عايز تلغي إسناد المندوب؟ الطلب هيرجع لقائمة "قيد التنفيذ".').then(function(ok){
+        if(!ok){ el.value = prev; return; }
+        doAssign(el, row, repId, prev);
+      });
+    } else {
+      doAssign(el, row, repId, prev);
+    }
+  }
+
+  function doAssign(el, row, repId, prev){
     el.disabled = true;
     callServer('assignRep', [MY_ID, row, repId, MY_PIN])
       .then(function(r){
         el.disabled = false;
-        if(!r.ok) showToast(r.error, 'error');
+        if(r.ok){ load(); }
+        else { showToast(r.error, 'error'); el.value = prev; }
       })
-      .catch(function(e){ el.disabled = false; showToast('خطأ: '+e.message, 'error'); });
+      .catch(function(e){ el.disabled = false; showToast('خطأ: '+e.message, 'error'); el.value = prev; });
   }
 
   function setComm(el, row, val){
@@ -921,7 +1006,7 @@
       .catch(function(e){ el.disabled = false; showToast('خطأ: '+e.message, 'error'); });
   }
 
-  function setStatus(btn, row, status){
+  function setStatus(btn, row, status, adminOverride){
     let reason = '', paidAmt = null;
     if(status === 'رفض و دفع'){
       const val = prompt('اكتب مصاريف الشحن اللي العميل دفعها (رقم بس):');
@@ -934,6 +1019,7 @@
     } else if(status !== 'تم التسليم'){
       reason = prompt('ملاحظة (اختياري):') || '';
     }
+    if(adminOverride){ reason = '[تغيير من الأدمن] ' + reason; }
     if(navigator.vibrate){ try{ navigator.vibrate(30); }catch(e){} }
     const cardEl = btn.closest('.card');
     const allBtns = cardEl ? cardEl.querySelectorAll('button') : [btn];
@@ -943,7 +1029,7 @@
         if(r.ok){
           showStatusConfirm(status);
           // حركة اختفاء الكارت قبل إعادة التحميل
-          if(cardEl && MAIN_TAB === 'pending'){ cardEl.classList.add('removing'); }
+          if(cardEl && (MAIN_TAB === 'pending' || MAIN_TAB === 'assigned')){ cardEl.classList.add('removing'); }
           setTimeout(function(){ load(); }, 450);
         }
         else { showToast(r.error, 'error'); allBtns.forEach(function(b){ b.disabled = false; }); }
