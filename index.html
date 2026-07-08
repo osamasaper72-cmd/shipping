@@ -255,6 +255,14 @@
   .day-counter .dc-text span{color:var(--go)}
   .day-counter .dc-emoji{font-size:22px}
 
+  /* زرارات تأكيد/إلغاء الإسناد */
+  .assignActs{display:flex; gap:8px; margin-top:10px}
+  .assign-btn{flex:1; border:0; border-radius:10px; padding:11px; font-family:inherit;
+    font-weight:700; font-size:13px; background:var(--go); color:#06241c}
+  .assign-btn:disabled{opacity:.6}
+  .unassign-btn{border:1px solid #4a2323; background:var(--bg); color:var(--no);
+    border-radius:10px; padding:11px 14px; font-family:inherit; font-weight:700; font-size:13px}
+
   /* زرار تحديث الحالة يدويًا (طوارئ) للأدمن */
   .override-wrap{margin-top:10px}
   .override-btn{width:100%; border:1px dashed #52341f; background:#2a1f14; color:var(--wait);
@@ -617,8 +625,8 @@
 
     const tab1Label = 'قيد التنفيذ';
     const tab2Label = d.role==='admin' ? 'تم التنفيذ' : 'تم التسليم';
-    const unassignedCount = d.role==='admin' ? PENDING.filter(function(x){return !x.repId;}).length : 0;
-    const assignedCount = d.role==='admin' ? PENDING.filter(function(x){return !!x.repId;}).length : 0;
+    const unassignedCount = d.role==='admin' ? PENDING.filter(function(x){return !isFullyAssigned(x);}).length : 0;
+    const assignedCount = d.role==='admin' ? PENDING.filter(isFullyAssigned).length : 0;
     html += '<div class="tabs" id="mainTabsBar">'+
       '<button class="tab '+(MAIN_TAB==='pending'?'active':'')+'" data-tab="pending" onclick="switchMain(\'pending\')">'+tab1Label+(d.role==='admin' && unassignedCount ? ' ('+unassignedCount+')':'')+'</button>'+
       (d.role==='admin' ? '<button class="tab '+(MAIN_TAB==='assigned'?'active':'')+'" data-tab="assigned" onclick="switchMain(\'assigned\')">قيد التوصيل'+(assignedCount ? ' ('+assignedCount+')':'')+'</button>' : '')+
@@ -640,6 +648,12 @@
 
   function stat(n, label){
     return '<div class="stat"><b>'+n+'</b><span>'+label+'</span></div>';
+  }
+
+  /* الطلب يُعتبر "متسند بالكامل" (وبالتالي ينتقل لـ"قيد التوصيل") لما
+     يكون له مندوب محدد وعمولة أكبر من صفر مع بعض، مش أي واحدة لوحدها. */
+  function isFullyAssigned(x){
+    return !!x.repId && Number(x.commission) > 0;
   }
 
   function tabOrder(){
@@ -823,7 +837,7 @@
     const q = box ? box.value.trim() : '';
     const list = document.getElementById('list');
     if(!list) return;
-    const base = ROLE === 'admin' ? PENDING.filter(function(x){ return !x.repId; }) : PENDING;
+    const base = ROLE === 'admin' ? PENDING.filter(function(x){ return !isFullyAssigned(x); }) : PENDING;
     if(!base.length){
       list.innerHTML = '<div class="center"><div class="empty-ill">📦</div><b>مفيش شحنات محتاجة إسناد</b>'+
         (ROLE==='admin'?'الصق بيانات الوكيل في الشيت وارجع اعمل تحديث.':'هتظهر شحناتك أول ما تتسند ليك.')+'</div>';
@@ -841,9 +855,9 @@
     const q = box ? box.value.trim() : '';
     const list = document.getElementById('assignedList');
     if(!list) return;
-    const base = PENDING.filter(function(x){ return !!x.repId; });
+    const base = PENDING.filter(isFullyAssigned);
     if(!base.length){
-      list.innerHTML = '<div class="center"><div class="empty-ill">🕐</div><b>لسه مفيش طلبات متسندة</b>اسند مندوب لأي طلب من "قيد التنفيذ".</div>';
+      list.innerHTML = '<div class="center"><div class="empty-ill">🕐</div><b>لسه مفيش طلبات قيد التوصيل</b>اسند مندوب وحدّد عمولة لأي طلب من "قيد التنفيذ".</div>';
       return;
     }
     const ordered = base.slice().reverse();
@@ -948,13 +962,17 @@
       '<span class="amt">💰 '+esc(x.amount)+' ج</span></div>';
 
     if(role==='admin'){
-      let opts = '<option value="">— غير مسند —</option>';
+      let opts = '<option value="">— اختار مندوب —</option>';
       REPS.forEach(r => opts += '<option value="'+esc(r.id)+'"'+
         (r.id===x.repId?' selected':'')+'>'+esc(r.name)+'</option>');
       h += '<div class="assign"><label>المندوب:</label>'+
-        '<select data-prev="'+esc(x.repId||'')+'" onchange="assign(this,'+x.row+', this.value)">'+opts+'</select></div>';
+        '<select id="rep-'+x.row+'">'+opts+'</select></div>';
       h += '<div class="commRow"><label>العمولة:</label>'+
-        '<input type="number" value="'+esc(x.commission||0)+'" onchange="setComm(this,'+x.row+', this.value)"></div>';
+        '<input type="number" id="comm-'+x.row+'" value="'+esc(x.commission||'')+'" placeholder="0"></div>';
+      h += '<div class="assignActs">'+
+        '<button class="assign-btn" onclick="confirmAssign(this,'+x.row+')">✓ '+(x.repId?'تحديث الإسناد':'تأكيد الإسناد')+'</button>'+
+        (x.repId ? '<button class="unassign-btn" onclick="unassignOrder(this,'+x.row+')">إلغاء الإسناد</button>' : '')+
+        '</div>';
     } else if(x.repName){
       h += '<div class="meta">🛵 '+esc(x.repName)+'</div>';
     }
@@ -973,37 +991,46 @@
     return h;
   }
 
-  function assign(el, row, repId){
-    const prev = el.dataset.prev || '';
-    if(!repId && prev){
-      showConfirm('متأكد إنك عايز تلغي إسناد المندوب؟ الطلب هيرجع لقائمة "قيد التنفيذ".').then(function(ok){
-        if(!ok){ el.value = prev; return; }
-        doAssign(el, row, repId, prev);
-      });
-    } else {
-      doAssign(el, row, repId, prev);
-    }
-  }
+  /* ===== إسناد الطلب: زرار واحد بيجمع المندوب + العمولة مع بعض =====
+     الطلب مش بيتحرك لتبويب "قيد التوصيل" غير لما الاتنين يتسجلوا مع بعض
+     (isFullyAssigned)، فمفيش داعي لحفظ تلقائي منفصل لكل حقل. */
+  function confirmAssign(btn, row){
+    const repSel = document.getElementById('rep-'+row);
+    const commInput = document.getElementById('comm-'+row);
+    const repId = repSel ? repSel.value : '';
+    const comm = commInput ? commInput.value : '';
+    if(!repId){ showToast('اختار مندوب الأول', 'error'); return; }
+    if(!comm || Number(comm) <= 0){ showToast('اكتب قيمة العمولة', 'error'); return; }
 
-  function doAssign(el, row, repId, prev){
-    el.disabled = true;
+    const originalText = btn.textContent;
+    btn.disabled = true; btn.textContent = 'جارِ الإسناد…';
     callServer('assignRep', [MY_ID, row, repId, MY_PIN])
       .then(function(r){
-        el.disabled = false;
-        if(r.ok){ load(); }
-        else { showToast(r.error, 'error'); el.value = prev; }
+        if(!r.ok){ showToast(r.error, 'error'); btn.disabled = false; btn.textContent = originalText; return null; }
+        return callServer('setCommission', [MY_ID, row, comm, MY_PIN]);
       })
-      .catch(function(e){ el.disabled = false; showToast('خطأ: '+e.message, 'error'); el.value = prev; });
+      .then(function(r2){
+        if(!r2) return; // فشل في الخطوة اللي فاتت، الرسالة بالفعل ظهرت
+        if(r2.ok){ showToast('تم إسناد الطلب ✅', 'success'); load(); }
+        else { showToast(r2.error, 'error'); btn.disabled = false; btn.textContent = originalText; }
+      })
+      .catch(function(e){
+        showToast('خطأ: '+e.message, 'error');
+        btn.disabled = false; btn.textContent = originalText;
+      });
   }
 
-  function setComm(el, row, val){
-    el.disabled = true;
-    callServer('setCommission', [MY_ID, row, val, MY_PIN])
-      .then(function(r){
-        el.disabled = false;
-        if(!r.ok) showToast(r.error, 'error');
-      })
-      .catch(function(e){ el.disabled = false; showToast('خطأ: '+e.message, 'error'); });
+  function unassignOrder(btn, row){
+    showConfirm('متأكد إنك عايز تلغي إسناد المندوب؟ الطلب هيرجع لقائمة "قيد التنفيذ".').then(function(ok){
+      if(!ok) return;
+      btn.disabled = true;
+      callServer('assignRep', [MY_ID, row, '', MY_PIN])
+        .then(function(r){
+          if(r.ok){ showToast('اتلغى الإسناد', 'success'); load(); }
+          else { showToast(r.error, 'error'); btn.disabled = false; }
+        })
+        .catch(function(e){ showToast('خطأ: '+e.message, 'error'); btn.disabled = false; });
+    });
   }
 
   function setStatus(btn, row, status, adminOverride){
