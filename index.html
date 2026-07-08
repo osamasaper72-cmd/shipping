@@ -656,6 +656,16 @@
     return !!x.repId && Number(x.commission) > 0;
   }
 
+  /* ترتيب بالأحدث لمسًا (updated) فوق، ولو اتنين نفس الوقت أو ماتلمسوش
+     خالص بيفضلوا على ترتيبهم الأصلي (الـ sort مستقر في المتصفحات الحديثة). */
+  function sortByRecency(arr){
+    return arr.slice().sort(function(a, b){
+      const ta = a.updated ? new Date(a.updated).getTime() : 0;
+      const tb = b.updated ? new Date(b.updated).getTime() : 0;
+      return tb - ta;
+    });
+  }
+
   function tabOrder(){
     return ROLE==='admin' ? ['pending','assigned','done','reps'] : ['pending','done'];
   }
@@ -843,8 +853,9 @@
         (ROLE==='admin'?'الصق بيانات الوكيل في الشيت وارجع اعمل تحديث.':'هتظهر شحناتك أول ما تتسند ليك.')+'</div>';
       return;
     }
-    // FIFO: الأقدم الأول. الـ backend بيرجّعهم الأحدث الأول، فبنعكس.
-    const ordered = base.slice().reverse();
+    // الأحدث فوق: بنرتب حسب وقت آخر تحديث (تعيين مندوب/عمولة) لو موجود،
+    // ولو الشحنة لسه ماتلمستش خالص بترجع لترتيبها الطبيعي (وقت إضافتها).
+    const ordered = sortByRecency(base);
     const filtered = !q ? ordered : ordered.filter(x => matchQ(x, q));
     list.innerHTML = filtered.length ? filtered.map(function(x,i){ return card(x, ROLE, ROLE !== 'admin', i); }).join('')
       : '<div class="center"><div class="empty-ill">🔍</div><b>مفيش نتائج</b>جرّب كلمة بحث تانية.</div>';
@@ -860,7 +871,8 @@
       list.innerHTML = '<div class="center"><div class="empty-ill">🕐</div><b>لسه مفيش طلبات قيد التوصيل</b>اسند مندوب وحدّد عمولة لأي طلب من "قيد التنفيذ".</div>';
       return;
     }
-    const ordered = base.slice().reverse();
+    // الأحدث إسنادًا فوق
+    const ordered = sortByRecency(base);
     const filtered = !q ? ordered : ordered.filter(x => matchQ(x, q));
     list.innerHTML = filtered.length ? filtered.map(function(x,i){ return card(x, ROLE, true, i); }).join('')
       : '<div class="center"><div class="empty-ill">🔍</div><b>مفيش نتائج</b></div>';
