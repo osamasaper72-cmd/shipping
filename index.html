@@ -254,10 +254,17 @@
   .day-counter .dc-text{font-size:14px; font-weight:700}
   .day-counter .dc-text span{color:var(--go)}
   .day-counter .dc-emoji{font-size:22px}
+
+  /* بانر انقطاع الإنترنت */
+  .offline-banner{position:fixed; top:0; left:0; right:0; background:var(--no); color:#2a0a0a;
+    text-align:center; font-size:13px; font-weight:800; padding:10px; z-index:10001;
+    transform:translateY(-100%); transition:transform .3s ease}
+  .offline-banner.show{transform:translateY(0)}
 </style>
 </head>
 <body>
   <div id="app"><div class="center">جارِ التحميل…</div></div>
+  <div id="offlineBanner" class="offline-banner">📡 مفيش اتصال بالإنترنت — بنحاول نرجعلك أول ما النت يرجع</div>
 
 <script>
   /* ============================================================
@@ -293,14 +300,31 @@
   /* ===== نداء الـ API =====
      بنبعت GET للـ Apps Script مع fn و args في الرابط.
      redirect:'follow' بيخلي المتصفح يتبع الـ 302 اللي Apps Script
-     بيعمله لحد ما يوصل للـ JSON النهائي. */
-  function callServer(fn, args){
+     بيعمله لحد ما يوصل للـ JSON النهائي.
+
+     إعادة محاولة تلقائية: لو الطلب فشل (نت ضعيف / تذبذب مؤقت من جوجل)،
+     نحاول تاني لحد 3 مرات قبل ما نوري خطأ نهائي للمستخدم. كمان بنضيف
+     رقم عشوائي (_cb) في كل مرة عشان نمنع المتصفح يورّي رد قديم متخزّن
+     من الكاش بدل ما يبعت طلب فعلي جديد. */
+  function callServer(fn, args, attempt){
+    attempt = attempt || 1;
     const url = API_URL + '?fn=' + encodeURIComponent(fn) +
-      '&args=' + encodeURIComponent(JSON.stringify(args || []));
-    return fetch(url, { method: 'GET', redirect: 'follow' })
+      '&args=' + encodeURIComponent(JSON.stringify(args || [])) +
+      '&_cb=' + Date.now() + Math.random().toString(36).slice(2);
+
+    return fetch(url, { method: 'GET', redirect: 'follow', cache: 'no-store' })
       .then(function(res){
         if(!res.ok) throw new Error('HTTP ' + res.status);
         return res.json();
+      })
+      .catch(function(err){
+        if(attempt < 3){
+          const delay = attempt * 700; // 700ms ثم 1400ms قبل كل محاولة
+          return new Promise(function(resolve){
+            setTimeout(function(){ resolve(callServer(fn, args, attempt + 1)); }, delay);
+          });
+        }
+        throw err;
       });
   }
 
@@ -962,6 +986,26 @@
         ptr.style.height = '0px';
       }
     }, {passive:true});
+  })();
+
+  /* ===== بانر انقطاع الإنترنت ===== */
+  (function setupOfflineBanner(){
+    const banner = document.getElementById('offlineBanner');
+    if(!banner) return;
+    function update(){
+      if(navigator.onLine){
+        banner.classList.remove('show');
+      } else {
+        banner.classList.add('show');
+      }
+    }
+    window.addEventListener('online', function(){
+      update();
+      showToast('🌐 النت رجع، بنحدّث البيانات', 'success');
+      if(MY_ID) silentRefresh();
+    });
+    window.addEventListener('offline', update);
+    update();
   })();
 
   init();
