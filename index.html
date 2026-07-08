@@ -302,24 +302,29 @@
      redirect:'follow' بيخلي المتصفح يتبع الـ 302 اللي Apps Script
      بيعمله لحد ما يوصل للـ JSON النهائي.
 
-     إعادة محاولة تلقائية: لو الطلب فشل (نت ضعيف / تذبذب مؤقت من جوجل)،
-     نحاول تاني لحد 3 مرات قبل ما نوري خطأ نهائي للمستخدم. كمان بنضيف
-     رقم عشوائي (_cb) في كل مرة عشان نمنع المتصفح يورّي رد قديم متخزّن
-     من الكاش بدل ما يبعت طلب فعلي جديد. */
+     وقت انتظار أقصى (timeout) 8 ثواني لكل محاولة: fetch() مفيهوش
+     وقت انتظار افتراضي، فلو الطلب بطيء جدًا (مش فاشل، بس بطيء) كان
+     ممكن يستنى للأبد. لو الوقت خلص، نعتبره فشل ونحاول تاني (لحد 3 مرات)
+     بدل ما نفضل واقفين على "جاري التحميل" من غير أي رد. */
   function callServer(fn, args, attempt){
     attempt = attempt || 1;
     const url = API_URL + '?fn=' + encodeURIComponent(fn) +
       '&args=' + encodeURIComponent(JSON.stringify(args || [])) +
       '&_cb=' + Date.now() + Math.random().toString(36).slice(2);
 
-    return fetch(url, { method: 'GET', redirect: 'follow', cache: 'no-store' })
+    const controller = new AbortController();
+    const timeoutId = setTimeout(function(){ controller.abort(); }, 8000);
+
+    return fetch(url, { method: 'GET', redirect: 'follow', cache: 'no-store', signal: controller.signal })
       .then(function(res){
+        clearTimeout(timeoutId);
         if(!res.ok) throw new Error('HTTP ' + res.status);
         return res.json();
       })
       .catch(function(err){
+        clearTimeout(timeoutId);
         if(attempt < 3){
-          const delay = attempt * 700; // 700ms ثم 1400ms قبل كل محاولة
+          const delay = attempt * 500;
           return new Promise(function(resolve){
             setTimeout(function(){ resolve(callServer(fn, args, attempt + 1)); }, delay);
           });
