@@ -7,10 +7,35 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%9A%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=IBM+Plex+Mono:wght@600&display=swap" rel="stylesheet">
-<!-- توليد QR للابلات الطباعة -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<!-- قراءة QR من كاميرا الموبايل -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
+<!-- توليد QR للابلات الطباعة (مع مصادر احتياطية) -->
+<script>
+  // بيحمّل السكربت من أكتر من مصدر ورا بعض: لو مصدر محجوب أو بطيء
+  // بينتقل للي بعده تلقائي — ده بيحل مشكلة "المكتبة مش بتتحمّل" على الشبكات
+  // اللي بتحجب بعض الـ CDNs.
+  function loadScriptFallback(srcs, cb){
+    var i = 0;
+    (function tryNext(){
+      if(i >= srcs.length){ if(cb) cb(false); return; }
+      var s = document.createElement('script');
+      s.src = srcs[i++];
+      s.onload = function(){ if(cb) cb(true); };
+      s.onerror = tryNext;
+      document.head.appendChild(s);
+    })();
+  }
+  loadScriptFallback([
+    'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
+    'https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js'
+  ]);
+  // قراءة QR من كاميرا الموبايل — مكتبة قوية (قارئ النظام الأصلي على أندرويد،
+  // وZXing على الآيفون) بدل jsQR الضعيفة.
+  loadScriptFallback([
+    'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js',
+    'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js'
+  ]);
+</script>
 <style>
   :root{
     --bg:#0f1620; --card:#18222f; --line:#26323f; --ink:#eef3f8; --mut:#8aa0b4;
@@ -300,11 +325,20 @@
   /* شاشة سكان الكاميرا */
   .scan-overlay{position:fixed; inset:0; background:#000; z-index:10002; display:flex; flex-direction:column}
   .scan-video-wrap{flex:1; position:relative; overflow:hidden}
-  .scan-video-wrap video{width:100%; height:100%; object-fit:cover}
-  .scan-frame{position:absolute; inset:15% 20%; border:3px solid var(--go); border-radius:16px; pointer-events:none}
+  .scan-video-wrap #qrReader{width:100%; height:100%}
+  .scan-video-wrap #qrReader video{width:100%!important; height:100%!important; object-fit:cover!important}
+  /* بنخفي واجهة المكتبة الافتراضية ونسيب الفيديو بس */
+  #qrReader img[alt="Info icon"], #qrReader__dashboard_section_csr span,
+  #qrReader__status_span, #qrReader__header_message{display:none!important}
+  #qrReader__scan_region{background:transparent!important}
   .scan-close{position:absolute; top:16px; left:16px; width:40px; height:40px; border-radius:50%;
-    background:rgba(0,0,0,.5); color:#fff; border:0; font-size:18px}
-  .scan-hint{padding:16px; text-align:center; color:#fff; background:#000; font-size:14px}
+    background:rgba(0,0,0,.5); color:#fff; border:0; font-size:18px; z-index:5}
+  .scan-hint{padding:14px; text-align:center; color:#fff; background:#000; font-size:14px}
+  .scan-manual{display:flex; gap:8px; padding:0 14px 16px; background:#000}
+  .scan-manual input{flex:1; height:44px; border-radius:10px; border:1px solid #333; background:#111;
+    color:#fff; padding:0 12px; font-family:inherit; font-size:14px; text-align:right}
+  .scan-manual button{flex-shrink:0; padding:0 18px; border-radius:10px; border:0;
+    background:var(--go); color:#06210f; font-family:inherit; font-weight:800; font-size:14px}
 
   /* زرار طباعة اللابلات وزرار الإسناد بالسكان */
   .printbtn{background:var(--partial); color:#06182a}
@@ -1278,9 +1312,10 @@
   }
 
   /* ===== سكان QR بكاميرا الموبايل (بديل لسكانر الـUSB) =====
-     منطق تشغيل الكاميرا وقراءة الفريمات مشترك بين وضعين: سكان لمرة واحدة
-     (بيدور على طلب في خانة البحث) وسكان مستمر (إسناد سريع للموزع). */
-  let scanStream = null, scanRAF = null;
+     بنستخدم مكتبة html5-qrcode: بتشغّل الكاميرا وتفكّ ترميز الـQR بقارئ
+     النظام الأصلي (أندرويد) أو ZXing (آيفون) — أقوى وأثبت بكتير من jsQR.
+     نفس المشغّل بيخدم وضعين: سكان لمرة واحدة (بحث)، وسكان مستمر (إسناد). */
+  let qrScanner = null;
 
   const SCAN_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" '+
     'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+
@@ -1288,74 +1323,69 @@
     '<path d="M7 20H5a1 1 0 0 1-1-1v-2"/><path d="M17 20h2a1 1 0 0 0 1-1v-2"/>'+
     '<line x1="4" y1="12" x2="20" y2="12"/></svg>';
 
-  function startQRCameraLoop(onDetect){
-    if(!window.jsQR){
-      return Promise.reject(new Error('مكتبة قراءة الأكواد لسه بتحمّل، جرّب تاني بعد ثانية'));
-    }
-    return navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-    })
-      .then(function(stream){
-        scanStream = stream;
-        const video = document.getElementById('scanVideo');
-        if(!video){ throw new Error('no-video'); }
-        video.srcObject = stream;
-        video.muted = true;
-        video.playsInline = true;
-        // بعض المتصفحات (خصوصًا سفاري) محتاجة استدعاء play() صريح، غير كده
-        // الفيديو ممكن يفضل واقف على readyState واطئ وميوصلش لمرحلة قراءة الفريمات
-        video.play().catch(function(){});
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        let lastScan = 0;
-
-        function tick(){
-          if(!scanStream) return;
-          const now = Date.now();
-          // بنقرا كل ~140 مللي بس (مش كل فريم) عشان منخنقش الموبايل ونسيب
-          // لـ jsQR وقت يكمّل عملية القراءة فعليًا — ده أهم إصلاح للبطء
-          if(video.readyState >= 2 && video.videoWidth > 0 && now - lastScan >= 140){
-            lastScan = now;
-            const vw = video.videoWidth, vh = video.videoHeight;
-            // بنصغّر الفريم لأقصى بُعد ~700px: أكواد الطلبات بسيطة (رقم قصير)
-            // فبتتقرا كويس بعد التصغير، والتصغير بيخلي القراءة أسرع بكتير
-            const scale = Math.min(1, 700 / Math.max(vw, vh));
-            canvas.width = Math.round(vw * scale);
-            canvas.height = Math.round(vh * scale);
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            try{
-              const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-              const result = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'attemptBoth' });
-              if(result && result.data){ onDetect(result.data); }
-            }catch(e){}
-          }
-          scanRAF = requestAnimationFrame(tick);
-        }
-        scanRAF = requestAnimationFrame(tick);
-      });
+  function buildScanOverlay(hintHtml, closeFn, manualFn){
+    const overlay = document.createElement('div');
+    overlay.className = 'scan-overlay';
+    overlay.innerHTML =
+      '<div class="scan-video-wrap"><div id="qrReader"></div>'+
+        '<button class="scan-close" onclick="'+closeFn+'()">✕</button>'+
+      '</div>'+
+      '<div class="scan-hint" id="scanHint">'+hintHtml+'</div>'+
+      '<div class="scan-manual">'+
+        '<input id="scanManualInput" placeholder="أو اكتب الكود يدويًا" inputmode="numeric">'+
+        '<button type="button" onclick="'+manualFn+'()">تأكيد</button>'+
+      '</div>';
+    document.body.appendChild(overlay);
+    return overlay;
   }
 
+  function startScanner(onDetect){
+    if(!window.Html5Qrcode){
+      showToast('مكتبة قراءة الأكواد لسه بتحمّل، استنى ثانية وجرّب تاني', 'error');
+      return false;
+    }
+    try{
+      qrScanner = new Html5Qrcode('qrReader', { verbose: false });
+      qrScanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: function(w, h){ const m = Math.round(Math.min(w, h) * 0.7); return { width: m, height: m }; } },
+        function(decodedText){ onDetect(String(decodedText)); },
+        function(){ /* فشل قراءة فريم — عادي، بنتجاهله */ }
+      ).catch(function(err){
+        showToast('مش قادر أفتح الكاميرا: '+(err&&err.message||err||''), 'error');
+        stopScanner();
+      });
+      return true;
+    }catch(e){
+      showToast('حصل خطأ في تشغيل الكاميرا', 'error');
+      return false;
+    }
+  }
+
+  function stopScanner(){
+    const s = qrScanner; qrScanner = null;
+    const p = (s && s.stop) ? s.stop().catch(function(){}) : Promise.resolve();
+    p.then(function(){ try{ if(s && s.clear) s.clear(); }catch(e){} });
+    const overlay = document.querySelector('.scan-overlay');
+    if(overlay) overlay.remove();
+  }
+
+  /* --- سكان لمرة واحدة: بيحط الكود في خانة البحث ويشغّل الفلترة --- */
   function openCameraScan(inputId, filterFnName){
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
       showToast('الكاميرا مش متاحة في المتصفح ده', 'error'); return;
     }
-    const overlay = document.createElement('div');
-    overlay.className = 'scan-overlay';
-    overlay.innerHTML =
-      '<div class="scan-video-wrap">'+
-        '<video id="scanVideo" autoplay playsinline muted></video>'+
-        '<div class="scan-frame"></div>'+
-        '<button class="scan-close" onclick="closeCameraScan()">✕</button>'+
-      '</div>'+
-      '<div class="scan-hint">وجّه الكاميرا على كود الطلب</div>';
-    document.body.appendChild(overlay);
+    SCAN_TARGET = { inputId: inputId, filterFnName: filterFnName };
+    buildScanOverlay('وجّه الكاميرا على كود الطلب', 'closeCameraScan', 'submitManualScan');
+    startScanner(function(code){ onScanSuccess(code, inputId, filterFnName); });
+  }
+  let SCAN_TARGET = null;
 
-    startQRCameraLoop(function(code){
-      onScanSuccess(code, inputId, filterFnName);
-    }).catch(function(err){
-      showToast('مش قادر أوصل للكاميرا: '+(err&&err.message||''), 'error');
-      closeCameraScan();
-    });
+  function submitManualScan(){
+    const inp = document.getElementById('scanManualInput');
+    const code = inp ? inp.value.trim() : '';
+    if(!code){ return; }
+    if(SCAN_TARGET) onScanSuccess(code, SCAN_TARGET.inputId, SCAN_TARGET.filterFnName);
   }
 
   function onScanSuccess(code, inputId, filterFnName){
@@ -1370,10 +1400,8 @@
   }
 
   function closeCameraScan(){
-    if(scanRAF){ cancelAnimationFrame(scanRAF); scanRAF = null; }
-    if(scanStream){ scanStream.getTracks().forEach(function(t){ t.stop(); }); scanStream = null; }
-    const overlay = document.querySelector('.scan-overlay');
-    if(overlay) overlay.remove();
+    SCAN_TARGET = null;
+    stopScanner();
   }
 
   /* ===== إسناد سريع بالسكان (للأدمن/مسؤول التوزيع) =====
@@ -1382,6 +1410,7 @@
      ✕. العمولة مش بتتحدد هنا — لو محتاجة تتظبط تقدر تعدّلها بعدين من
      كارت الطلب نفسه في "قيد التوصيل". */
   let scanAssignRepId = null, scanAssignRepName = '', scanAssignCount = 0;
+  let scanAssignLastCode = '', scanAssignLastTime = 0;
 
   function openScanAssign(){
     if(!REPS.length){ showToast('لسه مفيش مناديب مضافين', 'error'); return; }
@@ -1409,30 +1438,27 @@
       showToast('الكاميرا مش متاحة في المتصفح ده', 'error'); return;
     }
     scanAssignRepId = repId; scanAssignRepName = repName; scanAssignCount = 0;
+    scanAssignLastCode = ''; scanAssignLastTime = 0;
 
-    const overlay = document.createElement('div');
-    overlay.className = 'scan-overlay';
-    overlay.innerHTML =
-      '<div class="scan-video-wrap">'+
-        '<video id="scanVideo" autoplay playsinline muted></video>'+
-        '<div class="scan-frame"></div>'+
-        '<button class="scan-close" onclick="closeScanAssign()">✕</button>'+
-      '</div>'+
-      '<div class="scan-hint" id="scanAssignHint">بتسند لـ '+esc(repName)+' — سكان الطلب (0)</div>';
-    document.body.appendChild(overlay);
+    buildScanOverlay('بتسند لـ '+esc(repName)+' — سكان الطلب (0)', 'closeScanAssign', 'submitManualAssign');
+    document.getElementById('scanHint').id = 'scanAssignHint';
 
-    let lastCode = '', lastTime = 0;
-    startQRCameraLoop(function(code){
+    startScanner(function(code){
       const now = Date.now();
       // منع تسجيل نفس الكود أكتر من مرة وهو لسه في نطاق الكاميرا
-      if(code !== lastCode || now - lastTime > 2500){
-        lastCode = code; lastTime = now;
+      if(code !== scanAssignLastCode || now - scanAssignLastTime > 2500){
+        scanAssignLastCode = code; scanAssignLastTime = now;
         handleScanAssignHit(code);
       }
-    }).catch(function(err){
-      showToast('مش قادر أوصل للكاميرا: '+(err&&err.message||''), 'error');
-      closeScanAssign();
     });
+  }
+
+  function submitManualAssign(){
+    const inp = document.getElementById('scanManualInput');
+    const code = inp ? inp.value.trim() : '';
+    if(!code) return;
+    inp.value = '';
+    handleScanAssignHit(code);
   }
 
   function handleScanAssignHit(code){
@@ -1458,7 +1484,7 @@
   }
 
   function closeScanAssign(){
-    closeCameraScan();
+    stopScanner();
     const doneCount = scanAssignCount, doneName = scanAssignRepName;
     scanAssignRepId = null; scanAssignRepName = ''; scanAssignCount = 0;
     if(doneCount > 0) showToast('تم إسناد '+doneCount+' طلب لـ '+doneName, 'success');
