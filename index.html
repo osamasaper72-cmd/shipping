@@ -7,6 +7,10 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9A%9A%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=IBM+Plex+Mono:wght@600&display=swap" rel="stylesheet">
+<!-- توليد QR للابلات الطباعة -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!-- قراءة QR من كاميرا الموبايل -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
 <style>
   :root{
     --bg:#0f1620; --card:#18222f; --line:#26323f; --ink:#eef3f8; --mut:#8aa0b4;
@@ -286,6 +290,62 @@
     text-align:center; font-size:13px; font-weight:800; padding:10px; z-index:10001;
     transform:translateY(-100%); transition:transform .3s ease}
   .offline-banner.show{transform:translateY(0)}
+
+  /* صف البحث + زرار سكان الكاميرا */
+  .searchRow{display:flex; gap:8px; margin-bottom:12px}
+  .searchRow .search{margin-bottom:0}
+  .scanBtn{flex-shrink:0; width:48px; height:48px; border-radius:12px; border:1px solid var(--line);
+    background:var(--card); color:var(--go); font-size:20px; display:flex; align-items:center; justify-content:center}
+
+  /* شاشة سكان الكاميرا */
+  .scan-overlay{position:fixed; inset:0; background:#000; z-index:10002; display:flex; flex-direction:column}
+  .scan-video-wrap{flex:1; position:relative; overflow:hidden}
+  .scan-video-wrap video{width:100%; height:100%; object-fit:cover}
+  .scan-frame{position:absolute; inset:15% 20%; border:3px solid var(--go); border-radius:16px; pointer-events:none}
+  .scan-close{position:absolute; top:16px; left:16px; width:40px; height:40px; border-radius:50%;
+    background:rgba(0,0,0,.5); color:#fff; border:0; font-size:18px}
+  .scan-hint{padding:16px; text-align:center; color:#fff; background:#000; font-size:14px}
+
+  /* زرار طباعة اللابلات */
+  .printbtn{background:var(--partial); color:#06182a}
+
+  /* مودال اختيار الشحنات للطباعة */
+  .printsel-box{max-width:400px; text-align:right}
+  .printsel-box p{text-align:center}
+  .printsel-list{max-height:50vh; overflow-y:auto; margin-bottom:14px; text-align:right}
+  .printsel-row{display:flex; align-items:center; gap:8px; padding:9px 0; border-bottom:1px solid var(--line); font-size:13px}
+  .printsel-row input{flex-shrink:0; width:18px; height:18px}
+  .printsel-name{flex:1}
+  .printsel-code{color:var(--mut); font-size:12px}
+
+  /* منطقة الطباعة الفعلية (مخفية على الشاشة، بتظهر بس وقت الطباعة) */
+  #printArea{display:none}
+  @media print{
+    @page{size:38mm 25mm; margin:0}
+    body *{visibility:hidden}
+    #printArea, #printArea *{visibility:visible}
+    #printArea{display:block; position:absolute; top:0; left:0}
+    .print-label{
+      direction:ltr; display:flex; flex-direction:row; align-items:center; gap:1mm;
+      width:38mm; height:25mm; box-sizing:border-box; padding:1mm;
+      page-break-after:always; overflow:hidden;
+    }
+    .pl-qr{width:17mm; height:17mm; flex-shrink:0}
+    .pl-qr canvas, .pl-qr img{width:100%; height:100%}
+    .pl-info{direction:rtl; text-align:right; flex:1; overflow:hidden; font-family:'Tajawal',sans-serif; color:#000}
+    .pl-code{font-size:6.5pt; font-weight:700}
+    .pl-brand{font-size:7.5pt; font-weight:800; margin:0.4mm 0}
+    .pl-name{font-size:7.5pt; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+    .pl-phone{font-size:7pt; font-family:'IBM Plex Mono',monospace}
+    .pl-price{font-size:7.5pt; font-weight:800}
+  }
+
+  /* صفوف شحنات المندوب داخل تبويب المناديب */
+  .rep-ship-row{display:flex; align-items:center; justify-content:space-between; gap:8px;
+    padding:8px 0; border-bottom:1px solid var(--line); font-size:13px}
+  .rep-ship-row:last-child{border-bottom:0}
+  .rep-ship-name{flex:1; color:var(--ink); font-weight:600}
+  .rep-ship-phone{color:var(--mut); font-size:12px}
 </style>
 </head>
 <body>
@@ -300,8 +360,8 @@
   ============================================================ */
   const API_URL = 'https://script.google.com/macros/s/AKfycbxhXE0bzdqCxuIep9BEt7kMtYxYp7p7Ehs0Fn70it9jpHy_93krqQnZFHMhigp-4mkh/exec';
 
-  /* لما تقرر اسم الشركة، غيّره من هنا بس — بيتستخدم في رسائل الواتساب و SMS */
-  const COMPANY_NAME = 'الشركة';
+  /* لما تقرر اسم الشركة النهائي، غيّره من هنا بس — بيتستخدم في رسائل الواتساب/SMS وعلى اللابل */
+  const COMPANY_NAME = 'Beheira Express';
 
   const STORAGE_KEY = 'shipsys_uid';
   const STORAGE_KEY_PIN = 'shipsys_pin';
@@ -446,6 +506,73 @@
     if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
   }
 
+  /* بنعتبر إن فيه "إجراء شغّال" (مودال مفتوح، أو زرار متعطّل لحد ما يرد
+     السيرفر) ومنأجّلش تحديث القايمة عشان منقطعوش على المستخدم لحظة ما هو
+     بيعمل حاجة — البيانات لسه بتتحدّث في الخلفية، بس هيظهر في الدورة الجاية. */
+  function isSafeToRerenderList(){
+    if(document.querySelector('.modal-overlay, .choice-overlay, .status-overlay, .scan-overlay')) return false;
+    const body = document.getElementById('mainBody');
+    if(body && body.querySelector('button:disabled')) return false;
+    return true;
+  }
+
+  function captureRepDetailsState(){
+    const open = {};
+    document.querySelectorAll('.rep-details').forEach(function(d){
+      if(!d.hidden){
+        const sel = d.querySelector('select.filter');
+        open[d.dataset.repid] = sel ? sel.value : 'all';
+      }
+    });
+    return open;
+  }
+  function restoreRepDetailsState(open){
+    Object.keys(open).forEach(function(repId){
+      const d = document.querySelector('.rep-details[data-repid="'+repId.replace(/"/g,'')+'"]');
+      if(!d) return;
+      d.hidden = false;
+      const sel = d.querySelector('select.filter');
+      if(sel) sel.value = open[repId];
+      renderRepShipmentsFor(d, open[repId]);
+    });
+  }
+
+  /* بتحدّث أرقام الملخص العلوي (الإحصائيات + التحصيل/العمولة/الصافي + عدّاد
+     اليوم + أرقام التبويبات) بلمسة مباشرة للعناصر، من غير ما تمس أي حاجة
+     تانية في الصفحة — ده اللي بيمنع "التقطيع" اللي كان بيحصل من إعادة رسم
+     الصفحة كلها كل 15 ثانية. */
+  function patchHeaderNumbers(d){
+    const s = d.stats;
+    const elP = document.getElementById('statPending'); if(elP) elP.textContent = s.pendingCount;
+    const elD = document.getElementById('statDone'); if(elD) elD.textContent = s.doneCount;
+    const elC = document.getElementById('statCollected'); if(elC) elC.textContent = s.collected+' ج';
+    const elM = document.getElementById('statCommission'); if(elM) elM.textContent = s.commission+' ج';
+    const elN = document.getElementById('statNet'); if(elN) elN.textContent = s.net+' ج';
+
+    if(d.role==='rep'){
+      const total = s.pendingCount + s.doneCount;
+      const dc = document.getElementById('dayCounter');
+      if(dc && total>0){
+        const emoji = s.pendingCount === 0 ? '🎉' : '🚚';
+        const msg = s.pendingCount === 0 ? 'خلّصت كل شحناتك! 👏' :
+          'خلّصت <span>'+s.doneCount+'</span> من '+total+' — فاضل '+s.pendingCount;
+        const txt = dc.querySelector('.dc-text'); if(txt) txt.innerHTML = msg;
+        const em = dc.querySelector('.dc-emoji'); if(em) em.textContent = emoji;
+      }
+    }
+
+    const isMgr = (d.role==='admin' || d.role==='dispatcher');
+    const unassignedCount = isMgr ? (d.pending||[]).filter(function(x){return !isFullyAssigned(x);}).length : 0;
+    const assignedCount = isMgr ? (d.pending||[]).filter(isFullyAssigned).length : 0;
+    const bar = document.getElementById('mainTabsBar');
+    if(bar){
+      const pendBtn = bar.querySelector('[data-tab="pending"]');
+      if(pendBtn) pendBtn.textContent = 'قيد التنفيذ'+(isMgr && unassignedCount ? ' ('+unassignedCount+')':'');
+      const asgBtn = bar.querySelector('[data-tab="assigned"]');
+      if(asgBtn) asgBtn.textContent = 'قيد التوصيل'+(assignedCount ? ' ('+assignedCount+')':'');
+    }
+  }
+
   function silentRefresh(){
     if(!MY_ID || document.hidden) return;
     const activeEl = document.activeElement;
@@ -463,14 +590,36 @@
           if(navigator.vibrate){ try{ navigator.vibrate(60); }catch(e){} }
         }
       }
-      const q1 = document.getElementById('q'), q2 = document.getElementById('q2'), qa = document.getElementById('qa');
-      const savedQ1 = q1 ? q1.value : '', savedQ2 = q2 ? q2.value : '', savedQa = qa ? qa.value : '';
-      render(r);
+
+      REPS = r.reps || []; PENDING = r.pending || []; DONE = r.done || []; BALANCES = r.balances || [];
       lastPendingRows = (r.pending||[]).map(function(x){ return x.row; });
-      const nq1 = document.getElementById('q'), nq2 = document.getElementById('q2'), nqa = document.getElementById('qa');
-      if(nq1 && savedQ1){ nq1.value = savedQ1; filterPending(); }
-      if(nq2 && savedQ2){ nq2.value = savedQ2; filterDone(); }
-      if(nqa && savedQa){ nqa.value = savedQa; filterAssigned(); }
+      patchHeaderNumbers(r);
+
+      // فيه إجراء شغّال (مودال مفتوح أو نداء لسه ما رجعش)؟ منأجّلش تحديث
+      // القايمة الدورة دي عشان منقطعوش عليه؛ الأرقام فوق اتحدّثت خلاص.
+      if(!isSafeToRerenderList()) return;
+
+      const scrollY = window.scrollY;
+      const repState = MAIN_TAB === 'reps' ? captureRepDetailsState() : null;
+
+      if(MAIN_TAB === 'pending') filterPending();
+      else if(MAIN_TAB === 'assigned') filterAssigned();
+      else if(MAIN_TAB === 'reps'){
+        renderRepsTab(document.getElementById('repsList'));
+        if(repState) restoreRepDetailsState(repState);
+      } else if(ROLE !== 'admin' && ROLE !== 'dispatcher'){
+        const list = document.getElementById('doneList');
+        if(list){
+          list.innerHTML = DONE.length ? DONE.map(function(x,i){ return card(x, ROLE, false, i); }).join('') :
+            '<div class="center"><div class="empty-ill">✅</div><b>لسه مفيش حاجة منفّذة</b>هتظهر هنا أول ما تحدّد حالة أي شحنة.</div>';
+        }
+      } else if(SUB_TAB === 'collect'){
+        const sb = document.getElementById('subBody'); if(sb) renderBalances(sb);
+      } else {
+        filterDone();
+      }
+
+      requestAnimationFrame(function(){ window.scrollTo(0, scrollY); });
     }).catch(function(){ /* أخطاء الريفرش الصامت متتجاهلش عشان متزعجش المستخدم */ });
   }
 
@@ -492,7 +641,7 @@
         '<p>أدخل الـ ID بتاعك مرة واحدة بس، والسيستم هيفتكره بعد كده.<br>'+
         'لو مش عارف الـ ID بتاعك، اسأل الأدمن وهيديهولك.</p>'+
         '<input id="idInput" inputmode="numeric" placeholder="اكتب الـ ID هنا">'+
-        '<input id="pinInput" type="password" inputmode="numeric" placeholder="PIN (للأدمن بس، سيبه فاضي لو مندوب)">'+
+        '<input id="pinInput" type="password" inputmode="numeric" placeholder="PIN (للأدمن أو مسؤول التوزيع لو مفعّل، سيبه فاضي لو مندوب)">'+
         '<button onclick="tryLogin()">دخول</button>'+
         '<div class="err">'+(err?esc(err):'')+'</div>'+
       '</div>';
@@ -599,12 +748,15 @@
     REPS = d.reps || []; PENDING = d.pending || []; DONE = d.done || []; BALANCES = d.balances || [];
     ROLE = d.role;
 
+    const isMgr = (d.role==='admin' || d.role==='dispatcher');
+    const subtitle = d.role==='admin' ? 'حساب الأدمن — تحكم كامل' :
+      d.role==='dispatcher' ? 'حساب مسؤول التوزيع' : 'حساب مندوب — شحناتك';
     let html = '<h1>أهلاً '+esc(d.name)+' 👋</h1>'+
-      '<div class="sub">'+(d.role==='admin'?'حساب الأدمن — تحكم كامل':'حساب مندوب — شحناتك')+'</div>';
+      '<div class="sub">'+subtitle+'</div>';
 
     const s = d.stats;
     html += '<div class="stats2">'+
-      stat(s.pendingCount,'قيد التنفيذ')+stat(s.doneCount,'منفّذ')+'</div>';
+      stat(s.pendingCount,'قيد التنفيذ','statPending')+stat(s.doneCount,'منفّذ','statDone')+'</div>';
 
     // عدّاد اليوم للمندوب: كام خلّص من إجمالي شحناته
     if(d.role==='rep'){
@@ -613,30 +765,38 @@
         const emoji = s.pendingCount === 0 ? '🎉' : '🚚';
         const msg = s.pendingCount === 0 ? 'خلّصت كل شحناتك! 👏' :
           'خلّصت <span>'+s.doneCount+'</span> من '+total+' — فاضل '+s.pendingCount;
-        html += '<div class="day-counter"><div class="dc-text">'+msg+'</div><div class="dc-emoji">'+emoji+'</div></div>';
+        html += '<div class="day-counter" id="dayCounter"><div class="dc-text">'+msg+'</div><div class="dc-emoji">'+emoji+'</div></div>';
       }
     }
 
     html += '<div class="money3">'+
-      '<div class="c1"><span>التحصيل</span><b>'+s.collected+' ج</b></div>'+
-      '<div class="c2"><span>العمولة</span><b>'+s.commission+' ج</b></div>'+
-      '<div class="c3"><span>الصافي</span><b>'+s.net+' ج</b></div>'+
+      '<div class="c1"><span>التحصيل</span><b id="statCollected">'+s.collected+' ج</b></div>'+
+      '<div class="c2"><span>العمولة</span><b id="statCommission">'+s.commission+' ج</b></div>'+
+      '<div class="c3"><span>الصافي</span><b id="statNet">'+s.net+' ج</b></div>'+
       '</div>';
 
     const tab1Label = 'قيد التنفيذ';
-    const tab2Label = d.role==='admin' ? 'تم التنفيذ' : 'تم التسليم';
-    const unassignedCount = d.role==='admin' ? PENDING.filter(function(x){return !isFullyAssigned(x);}).length : 0;
-    const assignedCount = d.role==='admin' ? PENDING.filter(isFullyAssigned).length : 0;
+    const tab2Label = isMgr ? 'تم التنفيذ' : 'تم التسليم';
+    const unassignedCount = isMgr ? PENDING.filter(function(x){return !isFullyAssigned(x);}).length : 0;
+    const assignedCount = isMgr ? PENDING.filter(isFullyAssigned).length : 0;
     html += '<div class="tabs" id="mainTabsBar">'+
-      '<button class="tab '+(MAIN_TAB==='pending'?'active':'')+'" data-tab="pending" onclick="switchMain(\'pending\')">'+tab1Label+(d.role==='admin' && unassignedCount ? ' ('+unassignedCount+')':'')+'</button>'+
-      (d.role==='admin' ? '<button class="tab '+(MAIN_TAB==='assigned'?'active':'')+'" data-tab="assigned" onclick="switchMain(\'assigned\')">قيد التوصيل'+(assignedCount ? ' ('+assignedCount+')':'')+'</button>' : '')+
+      '<button class="tab '+(MAIN_TAB==='pending'?'active':'')+'" data-tab="pending" onclick="switchMain(\'pending\')">'+tab1Label+(isMgr && unassignedCount ? ' ('+unassignedCount+')':'')+'</button>'+
+      (isMgr ? '<button class="tab '+(MAIN_TAB==='assigned'?'active':'')+'" data-tab="assigned" onclick="switchMain(\'assigned\')">قيد التوصيل'+(assignedCount ? ' ('+assignedCount+')':'')+'</button>' : '')+
       '<button class="tab '+(MAIN_TAB==='done'?'active':'')+'" data-tab="done" onclick="switchMain(\'done\')">'+tab2Label+'</button>'+
-      (d.role==='admin' ? '<button class="tab '+(MAIN_TAB==='reps'?'active':'')+'" data-tab="reps" onclick="switchMain(\'reps\')">المناديب</button>' : '')+
+      (isMgr ? '<button class="tab '+(MAIN_TAB==='reps'?'active':'')+'" data-tab="reps" onclick="switchMain(\'reps\')">المناديب</button>' : '')+
       '</div>';
 
-    if(d.role==='admin' && MAIN_TAB==='pending' && s.noCode>0){
+    if(isMgr && MAIN_TAB==='pending' && s.noCode>0){
       html += '<button class="gen" onclick="genCodes(this)">'+
         'توليد أكواد لكل الشحنات الجديدة<span class="badge">'+s.noCode+' من غير كود</span></button>';
+    }
+    if(isMgr && MAIN_TAB==='pending'){
+      const withCode = PENDING.filter(function(x){ return x.code; });
+      const unprinted = withCode.filter(function(x){ return !x.printed; }).length;
+      if(withCode.length){
+        html += '<button class="gen printbtn" onclick="openPrintLabels()">'+
+          '🖨️ طباعة اللابلات'+(unprinted?'<span class="badge">'+unprinted+' لسه ما اتطبعوش</span>':'')+'</button>';
+      }
     }
 
     html += '<div id="mainBody"></div>'+
@@ -646,8 +806,8 @@
     renderMainBody();
   }
 
-  function stat(n, label){
-    return '<div class="stat"><b>'+n+'</b><span>'+label+'</span></div>';
+  function stat(n, label, id){
+    return '<div class="stat"><b'+(id?' id="'+id+'"':'')+'>'+n+'</b><span>'+label+'</span></div>';
   }
 
   /* الطلب يُعتبر "متسند بالكامل" (وبالتالي ينتقل لـ"قيد التوصيل") لما
@@ -667,7 +827,7 @@
   }
 
   function tabOrder(){
-    return ROLE==='admin' ? ['pending','assigned','done','reps'] : ['pending','done'];
+    return (ROLE==='admin' || ROLE==='dispatcher') ? ['pending','assigned','done','reps'] : ['pending','done'];
   }
 
   function switchMain(tab){
@@ -697,29 +857,33 @@
     if(!body) return;
     const animClass = dir === 1 ? 'swipe-fwd' : dir === -1 ? 'swipe-back' : '';
 
+    const isMgr = (ROLE === 'admin' || ROLE === 'dispatcher');
+
     if(MAIN_TAB === 'pending'){
       body.innerHTML =
-        '<input id="q" class="search" placeholder="بحث بالاسم أو الموبايل أو الكود" oninput="filterPending()">'+
+        '<div class="searchRow"><input id="q" class="search" placeholder="بحث بالاسم أو الموبايل أو الكود" oninput="filterPending()">'+
+        '<button type="button" class="scanBtn" onclick="openCameraScan(\'q\',\'filterPending\')">📷</button></div>'+
         '<div id="list" class="'+animClass+'"></div>';
       filterPending();
       return;
     }
 
-    if(MAIN_TAB === 'assigned' && ROLE === 'admin'){
+    if(MAIN_TAB === 'assigned' && isMgr){
       body.innerHTML =
-        '<input id="qa" class="search" placeholder="بحث بالاسم أو الموبايل أو الكود" oninput="filterAssigned()">'+
+        '<div class="searchRow"><input id="qa" class="search" placeholder="بحث بالاسم أو الموبايل أو الكود" oninput="filterAssigned()">'+
+        '<button type="button" class="scanBtn" onclick="openCameraScan(\'qa\',\'filterAssigned\')">📷</button></div>'+
         '<div id="assignedList" class="'+animClass+'"></div>';
       filterAssigned();
       return;
     }
 
-    if(MAIN_TAB === 'reps' && ROLE === 'admin'){
+    if(MAIN_TAB === 'reps' && isMgr){
       body.innerHTML = '<div id="repsList" class="'+animClass+'"></div>';
       renderRepsTab(document.getElementById('repsList'));
       return;
     }
 
-    if(ROLE === 'admin'){
+    if(isMgr){
       body.innerHTML =
         '<div class="tabs" id="subTabsBar">'+
           '<button class="tab '+(SUB_TAB==='log'?'active':'')+'" data-tab="log" onclick="switchSub(\'log\')">السجل</button>'+
@@ -762,36 +926,75 @@
     const all = PENDING.concat(DONE);
     container.innerHTML = REPS.map(function(rep){
       const items = all.filter(function(x){ return String(x.repId) === String(rep.id); });
-      const pendingCount = items.filter(function(x){ return !x.status || x.status === 'جديد'; }).length;
-      const statusCounts = {};
-      Object.keys(STATUS_META).forEach(function(st){ statusCounts[st] = 0; });
       let collected = 0, commission = 0;
       items.forEach(function(x){
-        if(x.status && STATUS_META[x.status]) statusCounts[x.status]++;
         const eff = moneyEffectJS(x.status, x.amount, x.commission, x.paidAmt);
         collected += eff.collected; commission += eff.commission;
       });
       const net = collected - commission;
-      const detailsRows = '<div class="rep-status-row"><span>قيد التنفيذ</span><b>'+pendingCount+'</b></div>'+
-        Object.keys(STATUS_META).map(function(st){
-          return '<div class="rep-status-row"><span>'+STATUS_META[st].label+'</span><b>'+statusCounts[st]+'</b></div>';
-        }).join('');
 
-      return '<div class="rep-card" onclick="toggleRepDetails(this)">'+
-        '<div class="rep-head"><b>'+esc(rep.name)+'</b><span class="rep-total">'+items.length+' شحنة</span></div>'+
+      let filterOpts = '<option value="all">كل الحالات</option>'+
+        '<option value="_pending">قيد التنفيذ</option>';
+      Object.keys(STATUS_META).forEach(function(st){
+        filterOpts += '<option value="'+esc(st)+'">'+esc(STATUS_META[st].label)+'</option>';
+      });
+
+      return '<div class="rep-card">'+
+        '<div class="rep-head" onclick="toggleRepDetails(this)"><b>'+esc(rep.name)+'</b><span class="rep-total">'+items.length+' شحنة</span></div>'+
         '<div class="rep-money">'+
           '<span>تحصيل <b>'+collected+' ج</b></span>'+
           '<span>عمولة <b>'+commission+' ج</b></span>'+
           '<span class="net">صافي <b>'+net+' ج</b></span>'+
         '</div>'+
-        '<div class="rep-details" hidden>'+detailsRows+'</div>'+
+        '<div class="rep-details" hidden data-repid="'+esc(rep.id)+'">'+
+          '<select class="filter" onchange="renderRepShipments(this)">'+filterOpts+'</select>'+
+          '<div class="rep-ship-list"></div>'+
+        '</div>'+
       '</div>';
     }).join('');
   }
 
-  function toggleRepDetails(el){
-    const d = el.querySelector('.rep-details');
-    if(d) d.hidden = !d.hidden;
+  /* أول ما تتفتح تفاصيل مندوب، بنعرض قائمة شحناته بالاسم/الرقم/الحالة، مع
+     فلتر "طبيعة الحركة" فوق يقدر يختار بيه حالة معينة يفلتر بيها. */
+  function toggleRepDetails(headEl){
+    const card = headEl.closest('.rep-card');
+    const d = card ? card.querySelector('.rep-details') : null;
+    if(!d) return;
+    const wasHidden = d.hidden;
+    d.hidden = !d.hidden;
+    if(wasHidden){
+      const sel = d.querySelector('select.filter');
+      renderRepShipmentsFor(d, sel ? sel.value : 'all');
+    }
+  }
+
+  function renderRepShipments(selectEl){
+    const details = selectEl.closest('.rep-details');
+    if(details) renderRepShipmentsFor(details, selectEl.value);
+  }
+
+  function renderRepShipmentsFor(details, filterVal){
+    const repId = details.dataset.repid;
+    const all = PENDING.concat(DONE);
+    let items = all.filter(function(x){ return String(x.repId) === String(repId); });
+    if(filterVal === '_pending') items = items.filter(function(x){ return !x.status || x.status === 'جديد'; });
+    else if(filterVal !== 'all') items = items.filter(function(x){ return x.status === filterVal; });
+    items = sortByRecency(items);
+
+    const list = details.querySelector('.rep-ship-list');
+    if(!list) return;
+    if(!items.length){
+      list.innerHTML = '<div class="rep-status-row"><span>مفيش شحنات بالحالة دي</span></div>';
+      return;
+    }
+    list.innerHTML = items.map(function(x){
+      const isPending = !x.status || x.status === 'جديد';
+      const meta = isPending ? {cls:'wait', label:'قيد التنفيذ'} : (STATUS_META[x.status] || {cls:'neutral', label:x.status});
+      return '<div class="rep-ship-row">'+
+        '<div class="rep-ship-name">'+esc(x.customer)+'<div class="rep-ship-phone mono">'+esc(x.phone||'')+'</div></div>'+
+        '<span class="pill '+meta.cls+'">'+meta.label+'</span>'+
+      '</div>';
+    }).join('');
   }
 
   function renderSubBody(){
@@ -801,10 +1004,11 @@
       renderBalances(sb);
     } else {
       let opts = '<option value="all">كل الحالات</option>';
-      Object.keys(STATUS_META).forEach(st => opts += '<option value="'+esc(st)+'">'+esc(st)+'</option>');
+      Object.keys(STATUS_META).forEach(st => opts += '<option value="'+esc(st)+'"'+(STATUS_FILTER===st?' selected':'')+'>'+esc(st)+'</option>');
       sb.innerHTML =
         '<select class="filter" onchange="STATUS_FILTER=this.value; filterDone()">'+opts+'</select>'+
-        '<input id="q2" class="search" placeholder="بحث بالاسم أو الموبايل أو الكود" oninput="filterDone()">'+
+        '<div class="searchRow"><input id="q2" class="search" placeholder="بحث بالاسم أو الموبايل أو الكود" oninput="filterDone()">'+
+        '<button type="button" class="scanBtn" onclick="openCameraScan(\'q2\',\'filterDone\')">📷</button></div>'+
         '<div id="logList"></div>';
       filterDone();
     }
@@ -847,17 +1051,18 @@
     const q = box ? box.value.trim() : '';
     const list = document.getElementById('list');
     if(!list) return;
-    const base = ROLE === 'admin' ? PENDING.filter(function(x){ return !isFullyAssigned(x); }) : PENDING;
+    const isMgr = (ROLE === 'admin' || ROLE === 'dispatcher');
+    const base = isMgr ? PENDING.filter(function(x){ return !isFullyAssigned(x); }) : PENDING;
     if(!base.length){
       list.innerHTML = '<div class="center"><div class="empty-ill">📦</div><b>مفيش شحنات محتاجة إسناد</b>'+
-        (ROLE==='admin'?'الصق بيانات الوكيل في الشيت وارجع اعمل تحديث.':'هتظهر شحناتك أول ما تتسند ليك.')+'</div>';
+        (isMgr?'الصق بيانات الوكيل في الشيت وارجع اعمل تحديث.':'هتظهر شحناتك أول ما تتسند ليك.')+'</div>';
       return;
     }
     // الأحدث فوق: بنرتب حسب وقت آخر تحديث (تعيين مندوب/عمولة) لو موجود،
     // ولو الشحنة لسه ماتلمستش خالص بترجع لترتيبها الطبيعي (وقت إضافتها).
     const ordered = sortByRecency(base);
     const filtered = !q ? ordered : ordered.filter(x => matchQ(x, q));
-    list.innerHTML = filtered.length ? filtered.map(function(x,i){ return card(x, ROLE, ROLE !== 'admin', i); }).join('')
+    list.innerHTML = filtered.length ? filtered.map(function(x,i){ return card(x, ROLE, ROLE === 'rep', i); }).join('')
       : '<div class="center"><div class="empty-ill">🔍</div><b>مفيش نتائج</b>جرّب كلمة بحث تانية.</div>';
   }
 
@@ -924,6 +1129,161 @@
       });
   }
 
+  /* ===== طباعة اللابلات (أدمن/مسؤول توزيع) =====
+     بتشتغل على الشحنات اللي ليها كود بالفعل داخل "قيد التنفيذ". بتفتح مودال
+     اختيار (اللي لسه ما اتطبعش بيبقوا متعلّمين افتراضيًا)، وبعدين بتطبع لابل
+     لكل شحنة متحددة (كود + QR + اسم الشركة + اسم العميل + الرقم + السعر)
+     بمقاس 38×25 مم، وبعد الطباعة بتسجل الشحنات دي "اتطبعت" في الشيت. */
+  function openPrintLabels(){
+    const withCode = sortByRecency(PENDING.filter(function(x){ return x.code; }));
+    if(!withCode.length){ showToast('مفيش شحنات لسه عليها كود', 'error'); return; }
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML =
+      '<div class="modal-box printsel-box">'+
+        '<p>اختار الشحنات اللي عايز تطبع لها لابل</p>'+
+        '<div class="printsel-list">'+
+          withCode.map(function(x){
+            return '<label class="printsel-row">'+
+              '<input type="checkbox" class="printsel-chk" data-row="'+x.row+'" '+(x.printed?'':'checked')+'>'+
+              '<span class="printsel-name">'+esc(x.customer)+'</span>'+
+              '<span class="printsel-code mono">'+esc(x.code)+'</span>'+
+              (x.printed?'<span class="pill neutral">اتطبع قبل كده</span>':'')+
+            '</label>';
+          }).join('')+
+        '</div>'+
+        '<div class="modal-actions">'+
+          '<button class="cancel" onclick="this.closest(\'.modal-overlay\').remove()">إلغاء</button>'+
+          '<button class="confirm" onclick="doPrintSelected(this)">🖨️ طباعة المحدد</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(overlay);
+  }
+
+  function doPrintSelected(btn){
+    const overlay = btn.closest('.modal-overlay');
+    const checks = overlay.querySelectorAll('.printsel-chk:checked');
+    if(!checks.length){ showToast('اختار شحنة واحدة على الأقل', 'error'); return; }
+    const rows = Array.prototype.map.call(checks, function(c){ return Number(c.dataset.row); });
+    const items = PENDING.filter(function(x){ return rows.indexOf(x.row) > -1; });
+    overlay.remove();
+    printLabels(items);
+  }
+
+  function printLabels(items){
+    let area = document.getElementById('printArea');
+    if(area) area.remove();
+    area = document.createElement('div');
+    area.id = 'printArea';
+    document.body.appendChild(area);
+
+    items.forEach(function(x){
+      const label = document.createElement('div');
+      label.className = 'print-label';
+      label.innerHTML =
+        '<div class="pl-qr" id="qr-'+x.row+'"></div>'+
+        '<div class="pl-info">'+
+          '<div class="pl-code">#'+esc(x.code)+'</div>'+
+          '<div class="pl-brand">'+esc(COMPANY_NAME)+'</div>'+
+          '<div class="pl-name">'+esc(x.customer)+'</div>'+
+          '<div class="pl-phone">'+esc(x.phone||'')+'</div>'+
+          '<div class="pl-price">'+esc(x.amount)+' ج</div>'+
+        '</div>';
+      area.appendChild(label);
+      try{
+        if(window.QRCode){
+          new QRCode(document.getElementById('qr-'+x.row), {
+            text: String(x.code), width: 180, height: 180,
+            correctLevel: QRCode.CorrectLevel.M
+          });
+        }
+      }catch(e){}
+    });
+
+    const rows = items.map(function(x){ return x.row; });
+    function afterPrint(){
+      window.removeEventListener('afterprint', afterPrint);
+      callServer('markPrinted', [MY_ID, rows, MY_PIN]).then(function(){ load(); }).catch(function(){});
+      const a = document.getElementById('printArea');
+      if(a) a.remove();
+    }
+    window.addEventListener('afterprint', afterPrint);
+    // مهلة بسيطة تضمن رسم الـQR كامل جوه العناصر قبل ما نطلب الطباعة
+    setTimeout(function(){ window.print(); }, 200);
+  }
+
+  /* ===== سكان QR بكاميرا الموبايل (بديل لسكانر الـUSB) =====
+     بتستخدم jsQR لقراءة الفريمات من الكاميرا مباشرة، وبمجرد ما تلاقي كود
+     تحطه في خانة البحث المحددة وتشغّل نفس فنكشن الفلترة اللي بتشتغل مع
+     الكتابة اليدوية أو سكانر الـUSB — من غير أي تعديل في السيرفر. */
+  let scanStream = null, scanRAF = null;
+
+  function openCameraScan(inputId, filterFnName){
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      showToast('الكاميرا مش متاحة في المتصفح ده', 'error'); return;
+    }
+    const overlay = document.createElement('div');
+    overlay.className = 'scan-overlay';
+    overlay.innerHTML =
+      '<div class="scan-video-wrap">'+
+        '<video id="scanVideo" autoplay playsinline muted></video>'+
+        '<div class="scan-frame"></div>'+
+        '<button class="scan-close" onclick="closeCameraScan()">✕</button>'+
+      '</div>'+
+      '<div class="scan-hint">وجّه الكاميرا على كود الطلب</div>';
+    document.body.appendChild(overlay);
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      .then(function(stream){
+        scanStream = stream;
+        const video = document.getElementById('scanVideo');
+        if(!video){ closeCameraScan(); return; }
+        video.srcObject = stream;
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        function tick(){
+          if(!scanStream) return;
+          if(video.readyState === video.HAVE_ENOUGH_DATA){
+            canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            try{
+              const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+              const result = window.jsQR ? jsQR(imgData.data, imgData.width, imgData.height) : null;
+              if(result && result.data){
+                onScanSuccess(result.data, inputId, filterFnName);
+                return;
+              }
+            }catch(e){}
+          }
+          scanRAF = requestAnimationFrame(tick);
+        }
+        scanRAF = requestAnimationFrame(tick);
+      })
+      .catch(function(err){
+        showToast('مش قادر أوصل للكاميرا: '+err.message, 'error');
+        closeCameraScan();
+      });
+  }
+
+  function onScanSuccess(code, inputId, filterFnName){
+    if(navigator.vibrate){ try{ navigator.vibrate(50); }catch(e){} }
+    closeCameraScan();
+    const input = document.getElementById(inputId);
+    if(input){
+      input.value = code;
+      if(typeof window[filterFnName] === 'function') window[filterFnName]();
+    }
+    showToast('اتلقط الكود ✅', 'success');
+  }
+
+  function closeCameraScan(){
+    if(scanRAF){ cancelAnimationFrame(scanRAF); scanRAF = null; }
+    if(scanStream){ scanStream.getTracks().forEach(function(t){ t.stop(); }); scanStream = null; }
+    const overlay = document.querySelector('.scan-overlay');
+    if(overlay) overlay.remove();
+  }
+
   function actsBlock(row, adminOverride){
     const ov = adminOverride ? ',true' : '';
     return '<div class="acts">'+
@@ -951,7 +1311,7 @@
     const delayStyle = 'style="animation-delay:'+((idx||0)*35)+'ms"';
     const codeBlock = x.code
       ? '<span class="code mono">'+esc(x.code)+'</span>'
-      : (role==='admin'
+      : ((role==='admin' || role==='dispatcher')
           ? '<button class="genone" onclick="genOne(this,'+x.row+')">توليد كود</button>'
           : '<span class="code empty mono">— بدون كود —</span>');
 
@@ -970,10 +1330,10 @@
     }
 
     h += '<div class="meta">'+
-      (x.address?'📍 '+esc(x.address)+' <button class="cbtn copy" style="height:26px;padding:0 8px;font-size:11px" onclick="copyText(\''+esc(x.address).replace(/'/g,"\\'")+'\',this)">نسخ</button><br>':'')+
+      (x.address?'📍 '+esc(x.address)+'<br>':'')+
       '<span class="amt">💰 '+esc(x.amount)+' ج</span></div>';
 
-    if(role==='admin'){
+    if(role==='admin' || role==='dispatcher'){
       let opts = '<option value="">— اختار مندوب —</option>';
       REPS.forEach(r => opts += '<option value="'+esc(r.id)+'"'+
         (r.id===x.repId?' selected':'')+'>'+esc(r.name)+'</option>');
@@ -994,9 +1354,10 @@
         h += '<div class="override-wrap" id="ovr-'+x.row+'">'+
           '<button class="override-btn" onclick="revealOverride(this,'+x.row+')">⚠️ تحديث الحالة يدويًا (طوارئ)</button>'+
         '</div>';
-      } else {
+      } else if(role === 'rep'){
         h += actsBlock(x.row, false);
       }
+      // مسؤول التوزيع: من غير تحكم في حالة التسليم عمدًا
     }
 
     h += '</div>';
@@ -1056,7 +1417,9 @@
       if(val === null) return;
       paidAmt = Number(val) || 0;
     } else if(status !== 'تم التسليم'){
-      reason = prompt('ملاحظة (اختياري):') || '';
+      const val = prompt('ملاحظة (اختياري):');
+      if(val === null) return; // كانسل = رجوع كامل، من غير أي تسجيل حالة
+      reason = val || '';
     }
     if(adminOverride){ reason = '[تغيير من الأدمن] ' + reason; }
     if(navigator.vibrate){ try{ navigator.vibrate(30); }catch(e){} }
