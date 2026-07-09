@@ -339,6 +339,25 @@
     color:#fff; padding:0 12px; font-family:inherit; font-size:14px; text-align:right}
   .scan-manual button{flex-shrink:0; padding:0 18px; border-radius:10px; border:0;
     background:var(--go); color:#06210f; font-family:inherit; font-weight:800; font-size:14px}
+  /* لوحة إدخال العمولة اللي بتظهر فوق شاشة السكان بعد التعرّف على الطلب */
+  .scan-comm{position:absolute; left:0; right:0; bottom:0; background:var(--card);
+    border-top:1px solid var(--line); border-radius:18px 18px 0 0; padding:18px 16px 22px;
+    z-index:6; box-shadow:0 -8px 30px rgba(0,0,0,.5)}
+  .scan-comm-name{font-size:16px; font-weight:800; color:var(--ink); margin-bottom:14px;
+    display:flex; align-items:center; justify-content:space-between; gap:10px}
+  .scan-comm-price{color:var(--go); font-size:14px; font-weight:800}
+  .scan-comm-row{display:flex; align-items:center; gap:10px; margin-bottom:16px}
+  .scan-comm-row label{font-size:14px; color:var(--mut); font-weight:700; flex-shrink:0}
+  .scan-comm-row input{flex:1; height:48px; border-radius:12px; border:1px solid var(--line);
+    background:var(--bg); color:var(--ink); padding:0 14px; font-family:inherit; font-size:18px;
+    font-weight:800; text-align:center}
+  .scan-comm-acts{display:flex; gap:10px}
+  .scan-comm-skip{flex-shrink:0; padding:0 20px; height:50px; border-radius:12px;
+    border:1px solid var(--line); background:var(--bg); color:var(--mut); font-family:inherit;
+    font-weight:700; font-size:14px}
+  .scan-comm-confirm{flex:1; height:50px; border-radius:12px; border:0; background:var(--go);
+    color:#06210f; font-family:inherit; font-weight:800; font-size:15px}
+  .scan-comm-confirm:disabled, .scan-comm-skip:disabled{opacity:.5}
 
   /* زرار طباعة اللابلات وزرار الإسناد بالسكان */
   .printbtn{background:var(--partial); color:#06182a}
@@ -1411,6 +1430,7 @@
      كارت الطلب نفسه في "قيد التوصيل". */
   let scanAssignRepId = null, scanAssignRepName = '', scanAssignCount = 0;
   let scanAssignLastCode = '', scanAssignLastTime = 0;
+  let scanAssignPaused = false;
 
   function openScanAssign(){
     if(!REPS.length){ showToast('لسه مفيش مناديب مضافين', 'error'); return; }
@@ -1444,6 +1464,7 @@
     document.getElementById('scanHint').id = 'scanAssignHint';
 
     startScanner(function(code){
+      if(scanAssignPaused) return; // في نص إدخال عمولة لطلب، مش بنقرا جديد
       const now = Date.now();
       // منع تسجيل نفس الكود أكتر من مرة وهو لسه في نطاق الكاميرا
       if(code !== scanAssignLastCode || now - scanAssignLastTime > 2500){
@@ -1454,6 +1475,7 @@
   }
 
   function submitManualAssign(){
+    if(scanAssignPaused) return;
     const inp = document.getElementById('scanManualInput');
     const code = inp ? inp.value.trim() : '';
     if(!code) return;
@@ -1461,6 +1483,8 @@
     handleScanAssignHit(code);
   }
 
+  /* أول ما يتلقط كود طلب صحيح، بنوقف السكان مؤقتًا ونعرض خانة العمولة +
+     زرار تأكيد — الإسناد الفعلي بيحصل بعد ما الموزع يأكّد. */
   function handleScanAssignHit(code){
     const hint = document.getElementById('scanAssignHint');
     const item = PENDING.find(function(x){ return String(x.code) === String(code); });
@@ -1470,21 +1494,73 @@
       return;
     }
     if(navigator.vibrate){ try{ navigator.vibrate(50); }catch(e){} }
+    scanAssignPaused = true;
+    showScanCommissionPanel(item);
+  }
+
+  function showScanCommissionPanel(item){
+    const overlay = document.querySelector('.scan-overlay');
+    if(!overlay){ scanAssignPaused = false; return; }
+    const old = document.getElementById('scanCommPanel');
+    if(old) old.remove();
+    const panel = document.createElement('div');
+    panel.id = 'scanCommPanel';
+    panel.className = 'scan-comm';
+    panel.innerHTML =
+      '<div class="scan-comm-name">📦 '+esc(item.customer)+'<span class="scan-comm-price">'+esc(item.amount)+' ج</span></div>'+
+      '<div class="scan-comm-row">'+
+        '<label>العمولة:</label>'+
+        '<input id="scanCommInput" type="number" inputmode="numeric" value="'+esc(item.commission||'')+'" placeholder="0">'+
+      '</div>'+
+      '<div class="scan-comm-acts">'+
+        '<button type="button" class="scan-comm-skip" onclick="cancelScanCommission()">تخطّي</button>'+
+        '<button type="button" class="scan-comm-confirm" onclick="confirmScanCommission('+item.row+')">✓ تأكيد الإسناد</button>'+
+      '</div>';
+    overlay.appendChild(panel);
+    setTimeout(function(){ const i = document.getElementById('scanCommInput'); if(i){ i.focus(); i.select(); } }, 60);
+  }
+
+  function confirmScanCommission(row){
+    const item = PENDING.find(function(x){ return x.row === row; });
+    if(!item){ endScanCommission(); return; }
+    const commInput = document.getElementById('scanCommInput');
+    const comm = commInput ? (Number(commInput.value) || 0) : 0;
+    const hint = document.getElementById('scanAssignHint');
+    const panel = document.getElementById('scanCommPanel');
+    if(panel) panel.querySelectorAll('button').forEach(function(b){ b.disabled = true; });
+
+    // الإسناد ثم تسجيل العمولة — الاتنين مع بعض زي الإسناد اليدوي بالظبط
     callServer('assignRep', [MY_ID, item.row, scanAssignRepId, MY_PIN]).then(function(res){
-      if(res && res.ok){
-        scanAssignCount++;
-        item.repId = scanAssignRepId; item.repName = scanAssignRepName;
-        if(hint) hint.textContent = '✅ اتسند: '+esc(item.customer)+' — '+scanAssignRepName+' ('+scanAssignCount+')';
-      } else if(hint){
-        hint.textContent = '⚠️ حصل خطأ، جرّب تاني — '+scanAssignRepName+' ('+scanAssignCount+')';
-      }
+      if(!(res && res.ok)) throw new Error('assign-failed');
+      return callServer('setCommission', [MY_ID, item.row, comm, MY_PIN]);
+    }).then(function(){
+      scanAssignCount++;
+      item.repId = scanAssignRepId; item.repName = scanAssignRepName; item.commission = comm;
+      if(navigator.vibrate){ try{ navigator.vibrate(40); }catch(e){} }
+      if(hint) hint.textContent = '✅ اتسند: '+item.customer+' — '+scanAssignRepName+' ('+scanAssignCount+')';
+      endScanCommission();
     }).catch(function(){
-      if(hint) hint.textContent = '⚠️ مفيش نت، جرّب تاني — '+scanAssignRepName+' ('+scanAssignCount+')';
+      if(hint) hint.textContent = '⚠️ حصل خطأ في الإسناد، جرّب تاني';
+      endScanCommission();
     });
+  }
+
+  function cancelScanCommission(){
+    const hint = document.getElementById('scanAssignHint');
+    if(hint) hint.textContent = 'اتخطّى — بتسند لـ '+scanAssignRepName+' ('+scanAssignCount+')';
+    endScanCommission();
+  }
+
+  function endScanCommission(){
+    const panel = document.getElementById('scanCommPanel');
+    if(panel) panel.remove();
+    scanAssignLastCode = '';   // نسمح بإعادة سكان نفس الكود لو احتاج
+    scanAssignPaused = false;   // نكمل السكان للطلب اللي بعده
   }
 
   function closeScanAssign(){
     stopScanner();
+    scanAssignPaused = false;
     const doneCount = scanAssignCount, doneName = scanAssignRepName;
     scanAssignRepId = null; scanAssignRepName = ''; scanAssignCount = 0;
     if(doneCount > 0) showToast('تم إسناد '+doneCount+' طلب لـ '+doneName, 'success');
