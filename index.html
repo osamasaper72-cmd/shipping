@@ -306,8 +306,15 @@
     background:rgba(0,0,0,.5); color:#fff; border:0; font-size:18px}
   .scan-hint{padding:16px; text-align:center; color:#fff; background:#000; font-size:14px}
 
-  /* زرار طباعة اللابلات */
+  /* زرار طباعة اللابلات وزرار الإسناد بالسكان */
   .printbtn{background:var(--partial); color:#06182a}
+  .scanassignbtn{background:var(--go); color:#06210f; display:flex; align-items:center; justify-content:center; gap:6px}
+
+  /* أزرار اختيار مندوب في مودال الإسناد بالسكان */
+  .repPickBtn{display:block; width:100%; text-align:right; padding:12px 14px; margin-bottom:8px;
+    border-radius:12px; border:1px solid var(--line); background:var(--bg); color:var(--ink);
+    font-family:inherit; font-size:14px; font-weight:700}
+  .repPickBtn:active{background:var(--card)}
 
   /* مودال اختيار الشحنات للطباعة */
   .printsel-box{max-width:400px; text-align:right}
@@ -497,6 +504,13 @@
      ما نوقفوش عليه شغله أو نستهلك quota من غير داعي. */
   let pollTimer = null;
   let lastPendingRows = [];
+  let SIG = { pending: '', done: '' };
+
+  function sigOf(items){
+    return (items||[]).map(function(x){
+      return [x.row,x.status,x.repId,x.commission,x.code,x.printed?1:0,x.customer,x.phone,x.amount,x.paidAmt].join('~');
+    }).join('|');
+  }
 
   function startPolling(){
     stopPolling();
@@ -595,6 +609,22 @@
       lastPendingRows = (r.pending||[]).map(function(x){ return x.row; });
       patchHeaderNumbers(r);
 
+      const newPendingSig = sigOf(r.pending);
+      const newDoneSig = sigOf(r.done);
+      const pendingChanged = newPendingSig !== SIG.pending;
+      const doneChanged = newDoneSig !== SIG.done;
+      SIG.pending = newPendingSig; SIG.done = newDoneSig;
+
+      // لو البيانات اللي بتظهر في التاب الحالي متغيّرتش خالص عن آخر مرة،
+      // منلمسش الـDOM أصلًا — ده اللي بيلغي "التقطيع" في الحالة الطبيعية
+      // (أغلب دورات الـ15 ثانية مفيهاش أي تغيير جديد).
+      const relevantChanged =
+        (MAIN_TAB === 'pending' || MAIN_TAB === 'assigned') ? pendingChanged :
+        (MAIN_TAB === 'reps') ? (pendingChanged || doneChanged) :
+        (ROLE !== 'admin' && ROLE !== 'dispatcher') ? doneChanged :
+        (SUB_TAB === 'collect') ? (pendingChanged || doneChanged) : doneChanged;
+      if(!relevantChanged) return;
+
       // فيه إجراء شغّال (مودال مفتوح أو نداء لسه ما رجعش)؟ منأجّلش تحديث
       // القايمة الدورة دي عشان منقطعوش عليه؛ الأرقام فوق اتحدّثت خلاص.
       if(!isSafeToRerenderList()) return;
@@ -659,6 +689,7 @@
           MY_ID = val; MY_PIN = pin;
           render(r);
           lastPendingRows = (r.pending||[]).map(function(x){ return x.row; });
+          SIG.pending = sigOf(r.pending); SIG.done = sigOf(r.done);
           startPolling();
         } else { showLogin(r.error || 'الرقم مش موجود في السيستم'); }
       })
@@ -678,6 +709,7 @@
         if(r.ok){
           render(r);
           lastPendingRows = (r.pending||[]).map(function(x){ return x.row; });
+          SIG.pending = sigOf(r.pending); SIG.done = sigOf(r.done);
           startPolling();
         }
         else { try{localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(STORAGE_KEY_PIN);}catch(e){} stopPolling(); showLogin(r.error); }
@@ -797,6 +829,9 @@
         html += '<button class="gen printbtn" onclick="openPrintLabels()">'+
           '🖨️ طباعة اللابلات'+(unprinted?'<span class="badge">'+unprinted+' لسه ما اتطبعوش</span>':'')+'</button>';
       }
+      if(REPS.length){
+        html += '<button class="gen scanassignbtn" onclick="openScanAssign()">'+SCAN_ICON+' إسناد سريع بالسكان</button>';
+      }
     }
 
     html += '<div id="mainBody"></div>'+
@@ -862,7 +897,7 @@
     if(MAIN_TAB === 'pending'){
       body.innerHTML =
         '<div class="searchRow"><input id="q" class="search" placeholder="بحث بالاسم أو الموبايل أو الكود" oninput="filterPending()">'+
-        '<button type="button" class="scanBtn" onclick="openCameraScan(\'q\',\'filterPending\')">📷</button></div>'+
+        '<button type="button" class="scanBtn" onclick="openCameraScan(\'q\',\'filterPending\')">'+SCAN_ICON+'</button></div>'+
         '<div id="list" class="'+animClass+'"></div>';
       filterPending();
       return;
@@ -871,7 +906,7 @@
     if(MAIN_TAB === 'assigned' && isMgr){
       body.innerHTML =
         '<div class="searchRow"><input id="qa" class="search" placeholder="بحث بالاسم أو الموبايل أو الكود" oninput="filterAssigned()">'+
-        '<button type="button" class="scanBtn" onclick="openCameraScan(\'qa\',\'filterAssigned\')">📷</button></div>'+
+        '<button type="button" class="scanBtn" onclick="openCameraScan(\'qa\',\'filterAssigned\')">'+SCAN_ICON+'</button></div>'+
         '<div id="assignedList" class="'+animClass+'"></div>';
       filterAssigned();
       return;
@@ -1008,7 +1043,7 @@
       sb.innerHTML =
         '<select class="filter" onchange="STATUS_FILTER=this.value; filterDone()">'+opts+'</select>'+
         '<div class="searchRow"><input id="q2" class="search" placeholder="بحث بالاسم أو الموبايل أو الكود" oninput="filterDone()">'+
-        '<button type="button" class="scanBtn" onclick="openCameraScan(\'q2\',\'filterDone\')">📷</button></div>'+
+        '<button type="button" class="scanBtn" onclick="openCameraScan(\'q2\',\'filterDone\')">'+SCAN_ICON+'</button></div>'+
         '<div id="logList"></div>';
       filterDone();
     }
@@ -1213,10 +1248,47 @@
   }
 
   /* ===== سكان QR بكاميرا الموبايل (بديل لسكانر الـUSB) =====
-     بتستخدم jsQR لقراءة الفريمات من الكاميرا مباشرة، وبمجرد ما تلاقي كود
-     تحطه في خانة البحث المحددة وتشغّل نفس فنكشن الفلترة اللي بتشتغل مع
-     الكتابة اليدوية أو سكانر الـUSB — من غير أي تعديل في السيرفر. */
+     منطق تشغيل الكاميرا وقراءة الفريمات مشترك بين وضعين: سكان لمرة واحدة
+     (بيدور على طلب في خانة البحث) وسكان مستمر (إسناد سريع للموزع). */
   let scanStream = null, scanRAF = null;
+
+  const SCAN_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" '+
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+
+    '<path d="M7 4H5a1 1 0 0 0-1 1v2"/><path d="M17 4h2a1 1 0 0 1 1 1v2"/>'+
+    '<path d="M7 20H5a1 1 0 0 1-1-1v-2"/><path d="M17 20h2a1 1 0 0 0 1-1v-2"/>'+
+    '<line x1="4" y1="12" x2="20" y2="12"/></svg>';
+
+  function startQRCameraLoop(onDetect){
+    return navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      .then(function(stream){
+        scanStream = stream;
+        const video = document.getElementById('scanVideo');
+        if(!video){ throw new Error('no-video'); }
+        video.srcObject = stream;
+        video.muted = true;
+        video.playsInline = true;
+        // بعض المتصفحات (خصوصًا سفاري) محتاجة استدعاء play() صريح، غير كده
+        // الفيديو ممكن يفضل واقف على readyState واطئ وميوصلش لمرحلة قراءة الفريمات
+        video.play().catch(function(){});
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        function tick(){
+          if(!scanStream) return;
+          if(video.readyState >= 2 && video.videoWidth > 0){
+            canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            try{
+              const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+              const result = window.jsQR ? jsQR(imgData.data, imgData.width, imgData.height) : null;
+              if(result && result.data) onDetect(result.data);
+            }catch(e){}
+          }
+          scanRAF = requestAnimationFrame(tick);
+        }
+        scanRAF = requestAnimationFrame(tick);
+      });
+  }
 
   function openCameraScan(inputId, filterFnName){
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
@@ -1233,37 +1305,12 @@
       '<div class="scan-hint">وجّه الكاميرا على كود الطلب</div>';
     document.body.appendChild(overlay);
 
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      .then(function(stream){
-        scanStream = stream;
-        const video = document.getElementById('scanVideo');
-        if(!video){ closeCameraScan(); return; }
-        video.srcObject = stream;
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-
-        function tick(){
-          if(!scanStream) return;
-          if(video.readyState === video.HAVE_ENOUGH_DATA){
-            canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            try{
-              const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-              const result = window.jsQR ? jsQR(imgData.data, imgData.width, imgData.height) : null;
-              if(result && result.data){
-                onScanSuccess(result.data, inputId, filterFnName);
-                return;
-              }
-            }catch(e){}
-          }
-          scanRAF = requestAnimationFrame(tick);
-        }
-        scanRAF = requestAnimationFrame(tick);
-      })
-      .catch(function(err){
-        showToast('مش قادر أوصل للكاميرا: '+err.message, 'error');
-        closeCameraScan();
-      });
+    startQRCameraLoop(function(code){
+      onScanSuccess(code, inputId, filterFnName);
+    }).catch(function(err){
+      showToast('مش قادر أوصل للكاميرا: '+(err&&err.message||''), 'error');
+      closeCameraScan();
+    });
   }
 
   function onScanSuccess(code, inputId, filterFnName){
@@ -1282,6 +1329,95 @@
     if(scanStream){ scanStream.getTracks().forEach(function(t){ t.stop(); }); scanStream = null; }
     const overlay = document.querySelector('.scan-overlay');
     if(overlay) overlay.remove();
+  }
+
+  /* ===== إسناد سريع بالسكان (للأدمن/مسؤول التوزيع) =====
+     يختار مندوب مرة واحدة، وبعدين الكاميرا تفضل شغالة وكل ما تسكان كود
+     طلب جديد بيتسند تلقائي للمندوب ده من غير ما تلمس الشاشة، لحد ما تدوس
+     ✕. العمولة مش بتتحدد هنا — لو محتاجة تتظبط تقدر تعدّلها بعدين من
+     كارت الطلب نفسه في "قيد التوصيل". */
+  let scanAssignRepId = null, scanAssignRepName = '', scanAssignCount = 0;
+
+  function openScanAssign(){
+    if(!REPS.length){ showToast('لسه مفيش مناديب مضافين', 'error'); return; }
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML =
+      '<div class="modal-box printsel-box">'+
+        '<p>اختار المندوب اللي هتسند له الطلبات بالسكان</p>'+
+        '<div class="printsel-list">'+
+          REPS.map(function(r){
+            return '<button type="button" class="repPickBtn" onclick="startScanAssign(\''+
+              esc(r.id).replace(/'/g,"\\'")+'\',\''+esc(r.name).replace(/'/g,"\\'")+'\')">'+esc(r.name)+'</button>';
+          }).join('')+
+        '</div>'+
+        '<div class="modal-actions">'+
+          '<button class="cancel" onclick="this.closest(\'.modal-overlay\').remove()">إلغاء</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(overlay);
+  }
+
+  function startScanAssign(repId, repName){
+    document.querySelectorAll('.modal-overlay').forEach(function(o){ o.remove(); });
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      showToast('الكاميرا مش متاحة في المتصفح ده', 'error'); return;
+    }
+    scanAssignRepId = repId; scanAssignRepName = repName; scanAssignCount = 0;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'scan-overlay';
+    overlay.innerHTML =
+      '<div class="scan-video-wrap">'+
+        '<video id="scanVideo" autoplay playsinline muted></video>'+
+        '<div class="scan-frame"></div>'+
+        '<button class="scan-close" onclick="closeScanAssign()">✕</button>'+
+      '</div>'+
+      '<div class="scan-hint" id="scanAssignHint">بتسند لـ '+esc(repName)+' — سكان الطلب (0)</div>';
+    document.body.appendChild(overlay);
+
+    let lastCode = '', lastTime = 0;
+    startQRCameraLoop(function(code){
+      const now = Date.now();
+      // منع تسجيل نفس الكود أكتر من مرة وهو لسه في نطاق الكاميرا
+      if(code !== lastCode || now - lastTime > 2500){
+        lastCode = code; lastTime = now;
+        handleScanAssignHit(code);
+      }
+    }).catch(function(err){
+      showToast('مش قادر أوصل للكاميرا: '+(err&&err.message||''), 'error');
+      closeScanAssign();
+    });
+  }
+
+  function handleScanAssignHit(code){
+    const hint = document.getElementById('scanAssignHint');
+    const item = PENDING.find(function(x){ return String(x.code) === String(code); });
+    if(!item){
+      if(navigator.vibrate){ try{ navigator.vibrate([30,50,30]); }catch(e){} }
+      if(hint) hint.textContent = '⚠️ الكود ده مش موجود — '+scanAssignRepName+' ('+scanAssignCount+')';
+      return;
+    }
+    if(navigator.vibrate){ try{ navigator.vibrate(50); }catch(e){} }
+    callServer('assignRep', [MY_ID, item.row, scanAssignRepId, MY_PIN]).then(function(res){
+      if(res && res.ok){
+        scanAssignCount++;
+        item.repId = scanAssignRepId; item.repName = scanAssignRepName;
+        if(hint) hint.textContent = '✅ اتسند: '+esc(item.customer)+' — '+scanAssignRepName+' ('+scanAssignCount+')';
+      } else if(hint){
+        hint.textContent = '⚠️ حصل خطأ، جرّب تاني — '+scanAssignRepName+' ('+scanAssignCount+')';
+      }
+    }).catch(function(){
+      if(hint) hint.textContent = '⚠️ مفيش نت، جرّب تاني — '+scanAssignRepName+' ('+scanAssignCount+')';
+    });
+  }
+
+  function closeScanAssign(){
+    closeCameraScan();
+    const doneCount = scanAssignCount, doneName = scanAssignRepName;
+    scanAssignRepId = null; scanAssignRepName = ''; scanAssignCount = 0;
+    if(doneCount > 0) showToast('تم إسناد '+doneCount+' طلب لـ '+doneName, 'success');
+    load();
   }
 
   function actsBlock(row, adminOverride){
@@ -1505,3 +1641,4 @@
 </script>
 </body>
 </html>
+
