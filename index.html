@@ -320,6 +320,10 @@
   .printsel-box{max-width:400px; text-align:right}
   .printsel-box p{text-align:center}
   .printsel-list{max-height:50vh; overflow-y:auto; margin-bottom:14px; text-align:right}
+  .printsel-box .search{margin-bottom:8px}
+  .printsel-tools{display:flex; gap:8px; margin-bottom:10px}
+  .mini-btn{flex:1; padding:8px; border-radius:9px; border:1px solid var(--line);
+    background:var(--bg); color:var(--mut); font-family:inherit; font-size:12px; font-weight:700}
   .printsel-row{display:flex; align-items:center; gap:8px; padding:9px 0; border-bottom:1px solid var(--line); font-size:13px}
   .printsel-row input{flex-shrink:0; width:18px; height:18px}
   .printsel-name{flex:1}
@@ -1177,22 +1181,48 @@
     overlay.innerHTML =
       '<div class="modal-box printsel-box">'+
         '<p>اختار الشحنات اللي عايز تطبع لها لابل</p>'+
-        '<div class="printsel-list">'+
-          withCode.map(function(x){
-            return '<label class="printsel-row">'+
-              '<input type="checkbox" class="printsel-chk" data-row="'+x.row+'" '+(x.printed?'':'checked')+'>'+
-              '<span class="printsel-name">'+esc(x.customer)+'</span>'+
-              '<span class="printsel-code mono">'+esc(x.code)+'</span>'+
-              (x.printed?'<span class="pill neutral">اتطبع قبل كده</span>':'')+
-            '</label>';
-          }).join('')+
+        '<input id="printSearch" class="search" placeholder="بحث بالاسم أو الموبايل أو الكود" oninput="filterPrintList()">'+
+        '<div class="printsel-tools">'+
+          '<button type="button" class="mini-btn" onclick="togglePrintAll(true)">تحديد الكل الظاهر</button>'+
+          '<button type="button" class="mini-btn" onclick="togglePrintAll(false)">إلغاء التحديد</button>'+
         '</div>'+
+        '<div class="printsel-list" id="printselList">'+ printListRows(withCode) +'</div>'+
         '<div class="modal-actions">'+
           '<button class="cancel" onclick="this.closest(\'.modal-overlay\').remove()">إلغاء</button>'+
           '<button class="confirm" onclick="doPrintSelected(this)">🖨️ طباعة المحدد</button>'+
         '</div>'+
       '</div>';
     document.body.appendChild(overlay);
+  }
+
+  function printListRows(items){
+    if(!items.length) return '<div class="rep-status-row"><span>مفيش نتائج</span></div>';
+    return items.map(function(x){
+      return '<label class="printsel-row" data-name="'+esc((x.customer||'')).toLowerCase()+'" data-phone="'+esc(String(x.phone||''))+'" data-code="'+esc(String(x.code||''))+'">'+
+        '<input type="checkbox" class="printsel-chk" data-row="'+x.row+'" '+(x.printed?'':'checked')+'>'+
+        '<span class="printsel-name">'+esc(x.customer)+'</span>'+
+        '<span class="printsel-code mono">'+esc(x.code)+'</span>'+
+        (x.printed?'<span class="pill neutral">اتطبع قبل كده</span>':'')+
+      '</label>';
+    }).join('');
+  }
+
+  // البحث بيخفي/يظهر الصفوف بس، من غير ما يمسح اختيارات الشحنات التانية —
+  // فتقدر تدور على دفعات مختلفة وتحدّدها بالتدريج قبل ما تطبع.
+  function filterPrintList(){
+    const q = (document.getElementById('printSearch').value || '').trim().toLowerCase();
+    document.querySelectorAll('#printselList .printsel-row').forEach(function(row){
+      const hay = (row.dataset.name||'')+' '+(row.dataset.phone||'')+' '+(row.dataset.code||'').toLowerCase();
+      row.style.display = (!q || hay.indexOf(q) > -1) ? '' : 'none';
+    });
+  }
+
+  function togglePrintAll(state){
+    document.querySelectorAll('#printselList .printsel-row').forEach(function(row){
+      if(row.style.display === 'none') return; // بيأثر على الظاهر بس
+      const chk = row.querySelector('.printsel-chk');
+      if(chk) chk.checked = state;
+    });
   }
 
   function doPrintSelected(btn){
@@ -1259,7 +1289,12 @@
     '<line x1="4" y1="12" x2="20" y2="12"/></svg>';
 
   function startQRCameraLoop(onDetect){
-    return navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    if(!window.jsQR){
+      return Promise.reject(new Error('مكتبة قراءة الأكواد لسه بتحمّل، جرّب تاني بعد ثانية'));
+    }
+    return navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    })
       .then(function(stream){
         scanStream = stream;
         const video = document.getElementById('scanVideo');
@@ -1271,17 +1306,27 @@
         // الفيديو ممكن يفضل واقف على readyState واطئ وميوصلش لمرحلة قراءة الفريمات
         video.play().catch(function(){});
         const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        let lastScan = 0;
 
         function tick(){
           if(!scanStream) return;
-          if(video.readyState >= 2 && video.videoWidth > 0){
-            canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+          const now = Date.now();
+          // بنقرا كل ~140 مللي بس (مش كل فريم) عشان منخنقش الموبايل ونسيب
+          // لـ jsQR وقت يكمّل عملية القراءة فعليًا — ده أهم إصلاح للبطء
+          if(video.readyState >= 2 && video.videoWidth > 0 && now - lastScan >= 140){
+            lastScan = now;
+            const vw = video.videoWidth, vh = video.videoHeight;
+            // بنصغّر الفريم لأقصى بُعد ~700px: أكواد الطلبات بسيطة (رقم قصير)
+            // فبتتقرا كويس بعد التصغير، والتصغير بيخلي القراءة أسرع بكتير
+            const scale = Math.min(1, 700 / Math.max(vw, vh));
+            canvas.width = Math.round(vw * scale);
+            canvas.height = Math.round(vh * scale);
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             try{
               const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-              const result = window.jsQR ? jsQR(imgData.data, imgData.width, imgData.height) : null;
-              if(result && result.data) onDetect(result.data);
+              const result = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'attemptBoth' });
+              if(result && result.data){ onDetect(result.data); }
             }catch(e){}
           }
           scanRAF = requestAnimationFrame(tick);
@@ -1641,4 +1686,3 @@
 </script>
 </body>
 </html>
-
