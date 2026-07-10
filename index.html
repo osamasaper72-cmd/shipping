@@ -907,13 +907,21 @@
       });
   }
 
+  // بيضيف صفر في الأول لو مش موجود (زي ما أرقام الموبايل المصرية بتتكتب عادة)
+  function formatRepPhone_(repId){
+    let s = String(repId||'').trim();
+    if(!s) return '';
+    if(s.charAt(0) !== '0') s = '0'+s;
+    return s;
+  }
+
   function waLink(phone, amount, repPhone){
     let p = String(phone).replace(/\D/g,'');
     if(p.indexOf('0') === 0) p = p.substring(1);
     if(p.indexOf('20') !== 0) p = '20'+p;
     const msg = encodeURIComponent(
       'شحنتك يافندم من '+COMPANY_NAME+' بسعر '+amount+' ج جاهزة\n'+
-      (repPhone ? 'جاهز، برجاء الاتصال برقم المندوب '+repPhone : 'جاهز، وهيتصل بيك المندوب قريب')
+      (repPhone ? 'برجاء الاتصال برقم المندوب '+formatRepPhone_(repPhone) : 'وهيتصل بيك المندوب قريب')
     );
     return 'https://wa.me/'+p+'?text='+msg;
   }
@@ -922,7 +930,7 @@
     const p = String(phone).replace(/[^\d+]/g,'');
     const msg = encodeURIComponent(
       'شحنتك يافندم من '+COMPANY_NAME+' بسعر '+amount+' ج جاهزة\n'+
-      (repPhone ? 'جاهز، برجاء الاتصال برقم المندوب '+repPhone : 'جاهز، وهيتصل بيك المندوب قريب')
+      (repPhone ? 'برجاء الاتصال برقم المندوب '+formatRepPhone_(repPhone) : 'وهيتصل بيك المندوب قريب')
     );
     return 'sms:'+p+'?body='+msg;
   }
