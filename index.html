@@ -213,6 +213,15 @@
   /* Admin reps overview */
   .rep-card{background:var(--card); border:1px solid var(--line); border-radius:16px;
     padding:14px 16px; margin-bottom:10px; cursor:pointer}
+  .add-rep-btn{display:block; width:100%; padding:13px; margin-bottom:12px; border-radius:12px;
+    border:1px dashed var(--go); background:transparent; color:var(--go);
+    font-family:inherit; font-size:14px; font-weight:800}
+  .add-rep-btn:active{background:var(--card)}
+  .addrep-field{text-align:right; margin-bottom:12px}
+  .addrep-field label{display:block; font-size:12px; color:var(--mut); font-weight:700; margin-bottom:6px}
+  .addrep-field input{width:100%; height:46px; border-radius:12px; border:1px solid var(--line);
+    background:var(--bg); color:var(--ink); padding:0 12px; font-family:inherit; font-size:14px;
+    text-align:right; box-sizing:border-box}
   .rep-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px}
   .rep-head b{font-size:16px}
   .rep-total{font-size:12px; color:var(--mut); background:var(--bg); border:1px solid var(--line);
@@ -339,6 +348,19 @@
     color:#fff; padding:0 12px; font-family:inherit; font-size:14px; text-align:right}
   .scan-manual button{flex-shrink:0; padding:0 18px; border-radius:10px; border:0;
     background:var(--go); color:#06210f; font-family:inherit; font-weight:800; font-size:14px}
+  /* شريط علوي في شاشة الإسناد: اسم المندوب + عمولة قابلة للتعديل */
+  .scan-topbar{display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:12px 14px; background:#0c1218; border-bottom:1px solid #1c2733}
+  .scan-topbar-rep{color:#fff; font-weight:800; font-size:14px}
+  .scan-topbar-comm{display:flex; align-items:center; gap:8px}
+  .scan-topbar-comm label{color:var(--mut); font-size:12px; font-weight:700}
+  .scan-topbar-comm input{width:80px; height:38px; border-radius:9px; border:1px solid #2a3744;
+    background:#111820; color:#fff; text-align:center; font-family:inherit; font-size:16px; font-weight:800}
+  .scan-start-hint{font-size:12px; color:var(--mut); text-align:center; margin-bottom:14px; line-height:1.5}
+  .summary-emoji{font-size:44px; text-align:center; margin-bottom:6px}
+  .summary-list{margin:12px 0; text-align:center}
+  .summary-row{padding:8px; border-radius:9px; background:var(--bg); margin-bottom:6px;
+    font-size:14px; font-weight:700; color:var(--ink)}
   /* لوحة إدخال العمولة اللي بتظهر فوق شاشة السكان بعد التعرّف على الطلب */
   .scan-comm{position:absolute; left:0; right:0; bottom:0; background:var(--card);
     border-top:1px solid var(--line); border-radius:18px 18px 0 0; padding:18px 16px 22px;
@@ -390,22 +412,23 @@
     #printArea, #printArea *{visibility:visible}
     #printArea{display:block; position:absolute; top:0; left:0}
     .print-label{
-      direction:ltr; display:flex; flex-direction:row; align-items:center; gap:1.2mm;
-      width:38mm; height:25mm; box-sizing:border-box; padding:1.5mm;
+      direction:ltr; display:flex; flex-direction:column; gap:0.6mm;
+      width:38mm; height:25mm; box-sizing:border-box; padding:1.3mm;
       page-break-after:always; overflow:hidden;
     }
-    /* الـQR أصغر (12مم) عشان يسيب مساحة أوسع للكتابة ومايحصلش تداخل.
-       بنخلي الـcanvas والـimg اللي بتولّدهم المكتبة فوق بعض بالظبط في نفس
-       المربّع، فحتى لو الاتنين ظهروا يبانوا كود واحد مش اتنين متداخلين. */
-    .pl-qr{position:relative; width:12mm; height:12mm; flex-shrink:0}
+    /* الشريط العلوي: رقم الأوردر شمال، واسم الشركة يمين */
+    .pl-top{display:flex; flex-direction:row; align-items:flex-start; justify-content:space-between; gap:1mm}
+    .pl-code{font-size:7pt; font-weight:800; color:#000; font-family:'IBM Plex Mono',monospace}
+    .pl-brand{font-size:7.5pt; font-weight:800; color:#000; text-align:right; font-family:'Tajawal',sans-serif; line-height:1.05}
+    /* الجسم: الـQR شمال، والبيانات يمين */
+    .pl-body{display:flex; flex-direction:row; align-items:center; gap:1.3mm; flex:1; min-height:0}
+    .pl-qr{position:relative; width:13mm; height:13mm; flex-shrink:0}
     .pl-qr canvas, .pl-qr img{position:absolute; inset:0; width:100%!important; height:100%!important; display:block!important}
     .pl-info{direction:rtl; text-align:right; flex:1; min-width:0; overflow:hidden;
-      font-family:'Tajawal',sans-serif; color:#000; line-height:1.2}
-    .pl-code{font-size:5pt; font-weight:700}
-    .pl-brand{font-size:5.5pt; font-weight:800; margin:0.3mm 0}
-    .pl-name{font-size:5.5pt; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-    .pl-phone{font-size:5.5pt; font-family:'IBM Plex Mono',monospace}
-    .pl-price{font-size:6pt; font-weight:800; margin-top:0.3mm}
+      font-family:'Tajawal',sans-serif; color:#000; line-height:1.25}
+    .pl-name{font-size:7pt; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+    .pl-price{font-size:7.5pt; font-weight:800; margin:0.3mm 0}
+    .pl-phone{font-size:6.5pt; font-weight:600; font-family:'IBM Plex Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   }
 
   /* صفوف شحنات المندوب داخل تبويب المناديب */
@@ -566,6 +589,18 @@
   let pollTimer = null;
   let lastPendingRows = [];
   let SIG = { pending: '', done: '' };
+  let deliveredSeen = null; // null = لسه ما اتهيّأش (أول تحميل مش بيطلّع إشعارات)
+
+  // بيجمّع الطلبات اللي حالتها تسليم (كامل/جزئي) في map: row → بياناتها
+  function collectDelivered(doneArr){
+    const m = {};
+    (doneArr || []).forEach(function(x){
+      if(x.status === 'تم التسليم' || x.status === 'تسليم جزئي'){
+        m[x.row] = { customer: x.customer, rep: x.repName, status: x.status };
+      }
+    });
+    return m;
+  }
 
   function sigOf(items){
     return (items||[]).map(function(x){
@@ -670,6 +705,24 @@
       lastPendingRows = (r.pending||[]).map(function(x){ return x.row; });
       patchHeaderNumbers(r);
 
+      // إشعار للأدمن/مسؤول التوزيع أول ما مندوب يسلّم طلب (بيشتغل والتطبيق مفتوح).
+      // بنحسبه هنا قبل أي early-return عشان الإشعار يوصل حتى لو القايمة
+      // متغيّرتش على الشاشة.
+      if(ROLE === 'admin' || ROLE === 'dispatcher'){
+        const nowDelivered = collectDelivered(DONE);
+        if(deliveredSeen){
+          Object.keys(nowDelivered).forEach(function(row){
+            if(!deliveredSeen[row]){
+              const d = nowDelivered[row];
+              const verb = d.status === 'تسليم جزئي' ? 'سلّم جزئيًا' : 'سلّم';
+              showToast('🎉 '+(d.rep || 'مندوب')+' '+verb+' طلب '+(d.customer || ''), 'success');
+              if(navigator.vibrate){ try{ navigator.vibrate(80); }catch(e){} }
+            }
+          });
+        }
+        deliveredSeen = nowDelivered;
+      }
+
       const newPendingSig = sigOf(r.pending);
       const newDoneSig = sigOf(r.done);
       const pendingChanged = newPendingSig !== SIG.pending;
@@ -751,6 +804,7 @@
           render(r);
           lastPendingRows = (r.pending||[]).map(function(x){ return x.row; });
           SIG.pending = sigOf(r.pending); SIG.done = sigOf(r.done);
+          deliveredSeen = (r.role==='admin'||r.role==='dispatcher') ? collectDelivered(r.done) : null;
           startPolling();
         } else { showLogin(r.error || 'الرقم مش موجود في السيستم'); }
       })
@@ -771,6 +825,7 @@
           render(r);
           lastPendingRows = (r.pending||[]).map(function(x){ return x.row; });
           SIG.pending = sigOf(r.pending); SIG.done = sigOf(r.done);
+          if(deliveredSeen === null && (r.role==='admin'||r.role==='dispatcher')) deliveredSeen = collectDelivered(r.done);
           startPolling();
         }
         else { try{localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(STORAGE_KEY_PIN);}catch(e){} stopPolling(); showLogin(r.error); }
@@ -1015,12 +1070,14 @@
 
   function renderRepsTab(container){
     if(!container) return;
+    const addBar = '<button class="add-rep-btn" onclick="openAddRep()">＋ إضافة مندوب</button>';
     if(!REPS.length){
-      container.innerHTML = '<div class="center"><div class="empty-ill">👥</div><b>لسه مفيش مناديب</b>ضيف مناديب في شيت Reps.</div>';
+      container.innerHTML = addBar +
+        '<div class="center"><div class="empty-ill">👥</div><b>لسه مفيش مناديب</b>دوس "إضافة مندوب" فوق عشان تضيف أول واحد.</div>';
       return;
     }
     const all = PENDING.concat(DONE);
-    container.innerHTML = REPS.map(function(rep){
+    container.innerHTML = addBar + REPS.map(function(rep){
       const items = all.filter(function(x){ return String(x.repId) === String(rep.id); });
       let collected = 0, commission = 0;
       items.forEach(function(x){
@@ -1050,8 +1107,50 @@
     }).join('');
   }
 
-  /* أول ما تتفتح تفاصيل مندوب، بنعرض قائمة شحناته بالاسم/الرقم/الحالة، مع
-     فلتر "طبيعة الحركة" فوق يقدر يختار بيه حالة معينة يفلتر بيها. */
+  /* ===== إضافة مندوب (أدمن/مسؤول توزيع) =====
+     بيضيف صف جديد في شيت Reps مباشرة من التطبيق. الكود اختياري — لو سيبته
+     فاضي بيتولّد تلقائي. المندوب الجديد بيبقى دوره "مندوب عادي". */
+  function openAddRep(){
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML =
+      '<div class="modal-box">'+
+        '<p>إضافة مندوب جديد</p>'+
+        '<div class="addrep-field"><label>اسم المندوب</label>'+
+          '<input id="addRepName" placeholder="مثلاً: أحمد علي"></div>'+
+        '<div class="addrep-field"><label>الكود (اختياري)</label>'+
+          '<input id="addRepId" inputmode="numeric" placeholder="سيبه فاضي عشان يتولّد تلقائي"></div>'+
+        '<div class="modal-actions">'+
+          '<button class="cancel" onclick="this.closest(\'.modal-overlay\').remove()">إلغاء</button>'+
+          '<button class="confirm" onclick="submitAddRep(this)">✓ إضافة</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(overlay);
+    setTimeout(function(){ const i = document.getElementById('addRepName'); if(i) i.focus(); }, 60);
+  }
+
+  function submitAddRep(btn){
+    const name = (document.getElementById('addRepName').value || '').trim();
+    const id = (document.getElementById('addRepId').value || '').trim();
+    if(!name){ showToast('اكتب اسم المندوب', 'error'); return; }
+    const overlay = btn.closest('.modal-overlay');
+    overlay.querySelectorAll('button').forEach(function(b){ b.disabled = true; });
+    callServer('addRep', [MY_ID, name, id, MY_PIN]).then(function(res){
+      if(res && res.ok){
+        overlay.remove();
+        showToast('تمت إضافة '+res.name+' (كود: '+res.id+')', 'success');
+        load();
+      } else {
+        overlay.querySelectorAll('button').forEach(function(b){ b.disabled = false; });
+        showToast((res && res.error) || 'حصل خطأ', 'error');
+      }
+    }).catch(function(){
+      overlay.querySelectorAll('button').forEach(function(b){ b.disabled = false; });
+      showToast('مفيش نت، جرّب تاني', 'error');
+    });
+  }
+
+
   function toggleRepDetails(headEl){
     const card = headEl.closest('.rep-card');
     const d = card ? card.querySelector('.rep-details') : null;
@@ -1302,14 +1401,21 @@
     items.forEach(function(x){
       const label = document.createElement('div');
       label.className = 'print-label';
+      // الأرقام: لو فيه أكتر من رقم (متفصولين بـ / أو , أو مسافة أو سطر) نعرضهم تحت بعض
+      const phones = String(x.phone||'').split(/[\/،,\n]+/).map(function(p){ return p.trim(); }).filter(Boolean);
+      const phonesHtml = phones.length ? phones.map(function(p){ return '<div class="pl-phone">'+esc(p)+'</div>'; }).join('') : '';
       label.innerHTML =
-        '<div class="pl-qr" id="qr-'+x.row+'"></div>'+
-        '<div class="pl-info">'+
-          '<div class="pl-code">#'+esc(x.code)+'</div>'+
-          '<div class="pl-brand">'+esc(COMPANY_NAME)+'</div>'+
-          '<div class="pl-name">'+esc(x.customer)+'</div>'+
-          '<div class="pl-phone">'+esc(x.phone||'')+'</div>'+
-          '<div class="pl-price">'+esc(x.amount)+' ج</div>'+
+        '<div class="pl-top">'+
+          '<span class="pl-code">#'+esc(x.code)+'</span>'+
+          '<span class="pl-brand">'+esc(COMPANY_NAME)+'</span>'+
+        '</div>'+
+        '<div class="pl-body">'+
+          '<div class="pl-qr" id="qr-'+x.row+'"></div>'+
+          '<div class="pl-info">'+
+            '<div class="pl-name">'+esc(x.customer)+'</div>'+
+            '<div class="pl-price">'+esc(x.amount)+' ج</div>'+
+            phonesHtml+
+          '</div>'+
         '</div>';
       area.appendChild(label);
       try{
@@ -1434,7 +1540,8 @@
      كارت الطلب نفسه في "قيد التوصيل". */
   let scanAssignRepId = null, scanAssignRepName = '', scanAssignCount = 0;
   let scanAssignLastCode = '', scanAssignLastTime = 0;
-  let scanAssignPaused = false;
+  let scanAssignCommission = 0;
+  let scanAssignBreakdown = {};
 
   function openScanAssign(){
     if(!REPS.length){ showToast('لسه مفيش مناديب مضافين', 'error'); return; }
@@ -1445,7 +1552,7 @@
         '<p>اختار المندوب اللي هتسند له الطلبات بالسكان</p>'+
         '<div class="printsel-list">'+
           REPS.map(function(r){
-            return '<button type="button" class="repPickBtn" onclick="startScanAssign(\''+
+            return '<button type="button" class="repPickBtn" onclick="chooseScanAssignRep(\''+
               esc(r.id).replace(/'/g,"\\'")+'\',\''+esc(r.name).replace(/'/g,"\\'")+'\')">'+esc(r.name)+'</button>';
           }).join('')+
         '</div>'+
@@ -1456,119 +1563,135 @@
     document.body.appendChild(overlay);
   }
 
+  /* بعد اختيار المندوب: بنطلب العمولة مرة واحدة تتطبق على كل الطلبات اللي
+     هتتسكن. تقدر تغيّرها بعد كده وانت بتسكان لو حبيت. */
+  function chooseScanAssignRep(repId, repName){
+    const box = document.querySelector('.modal-overlay .modal-box');
+    if(!box) return;
+    box.className = 'modal-box';
+    box.innerHTML =
+      '<p>العمولة لـ '+esc(repName)+'</p>'+
+      '<div class="addrep-field"><label>العمولة لكل طلب</label>'+
+        '<input id="scanStartComm" type="number" inputmode="numeric" placeholder="0"></div>'+
+      '<div class="scan-start-hint">هتتطبق على كل طلب هتسكانه — وتقدر تغيّرها في أي وقت وانت بتسكان</div>'+
+      '<div class="modal-actions">'+
+        '<button class="cancel" onclick="this.closest(\'.modal-overlay\').remove()">إلغاء</button>'+
+        '<button class="confirm" onclick="startScanAssign(\''+esc(repId).replace(/'/g,"\\'")+'\',\''+esc(repName).replace(/'/g,"\\'")+'\')">ابدأ السكان ▶</button>'+
+      '</div>';
+    setTimeout(function(){ const i = document.getElementById('scanStartComm'); if(i) i.focus(); }, 60);
+  }
+
   function startScanAssign(repId, repName){
+    const commEl = document.getElementById('scanStartComm');
+    const startComm = commEl ? (Number(commEl.value) || 0) : 0;
     document.querySelectorAll('.modal-overlay').forEach(function(o){ o.remove(); });
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
       showToast('الكاميرا مش متاحة في المتصفح ده', 'error'); return;
     }
     scanAssignRepId = repId; scanAssignRepName = repName; scanAssignCount = 0;
     scanAssignLastCode = ''; scanAssignLastTime = 0;
+    scanAssignCommission = startComm; scanAssignBreakdown = {};
 
-    buildScanOverlay('بتسند لـ '+esc(repName)+' — سكان الطلب (0)', 'closeScanAssign', 'submitManualAssign');
-    document.getElementById('scanHint').id = 'scanAssignHint';
+    const overlay = document.createElement('div');
+    overlay.className = 'scan-overlay';
+    overlay.innerHTML =
+      '<div class="scan-topbar">'+
+        '<div class="scan-topbar-rep">🛵 '+esc(repName)+'</div>'+
+        '<div class="scan-topbar-comm"><label>العمولة</label>'+
+          '<input id="scanLiveComm" type="number" inputmode="numeric" value="'+esc(startComm||'')+'" placeholder="0" oninput="updateScanCommission()"></div>'+
+      '</div>'+
+      '<div class="scan-video-wrap"><div id="qrReader"></div>'+
+        '<button class="scan-close" onclick="closeScanAssign()">✕</button>'+
+      '</div>'+
+      '<div class="scan-hint" id="scanAssignHint">وجّه الكاميرا على كود الطلب — اتسند 0</div>'+
+      '<div class="scan-manual">'+
+        '<input id="scanManualInput" placeholder="أو اكتب الكود يدويًا" inputmode="numeric">'+
+        '<button type="button" onclick="submitManualAssign()">تأكيد</button>'+
+      '</div>';
+    document.body.appendChild(overlay);
 
     startScanner(function(code){
-      if(scanAssignPaused) return; // في نص إدخال عمولة لطلب، مش بنقرا جديد
       const now = Date.now();
       // منع تسجيل نفس الكود أكتر من مرة وهو لسه في نطاق الكاميرا
-      if(code !== scanAssignLastCode || now - scanAssignLastTime > 2500){
+      if(code !== scanAssignLastCode || now - scanAssignLastTime > 2000){
         scanAssignLastCode = code; scanAssignLastTime = now;
         handleScanAssignHit(code);
       }
     });
   }
 
+  function updateScanCommission(){
+    const el = document.getElementById('scanLiveComm');
+    scanAssignCommission = el ? (Number(el.value) || 0) : 0;
+  }
+
   function submitManualAssign(){
-    if(scanAssignPaused) return;
     const inp = document.getElementById('scanManualInput');
     const code = inp ? inp.value.trim() : '';
     if(!code) return;
     inp.value = '';
+    scanAssignLastCode = code; scanAssignLastTime = Date.now();
     handleScanAssignHit(code);
   }
 
-  /* أول ما يتلقط كود طلب صحيح، بنوقف السكان مؤقتًا ونعرض خانة العمولة +
-     زرار تأكيد — الإسناد الفعلي بيحصل بعد ما الموزع يأكّد. */
+  /* إسناد سريع: كل كود صحيح بيتسند فورًا بالعمولة الحالية، من غير توقف —
+     عشان العملية تكون سريعة. وبنعدّ كل عمولة اتّسند بيها كام طلب للملخص. */
   function handleScanAssignHit(code){
     const hint = document.getElementById('scanAssignHint');
     const item = PENDING.find(function(x){ return String(x.code) === String(code); });
     if(!item){
       if(navigator.vibrate){ try{ navigator.vibrate([30,50,30]); }catch(e){} }
-      if(hint) hint.textContent = '⚠️ الكود ده مش موجود — '+scanAssignRepName+' ('+scanAssignCount+')';
+      if(hint) hint.textContent = '⚠️ الكود ده مش موجود — اتسند '+scanAssignCount;
       return;
     }
-    if(navigator.vibrate){ try{ navigator.vibrate(50); }catch(e){} }
-    scanAssignPaused = true;
-    showScanCommissionPanel(item);
-  }
-
-  function showScanCommissionPanel(item){
-    const overlay = document.querySelector('.scan-overlay');
-    if(!overlay){ scanAssignPaused = false; return; }
-    const old = document.getElementById('scanCommPanel');
-    if(old) old.remove();
-    const panel = document.createElement('div');
-    panel.id = 'scanCommPanel';
-    panel.className = 'scan-comm';
-    panel.innerHTML =
-      '<div class="scan-comm-name">📦 '+esc(item.customer)+'<span class="scan-comm-price">'+esc(item.amount)+' ج</span></div>'+
-      '<div class="scan-comm-row">'+
-        '<label>العمولة:</label>'+
-        '<input id="scanCommInput" type="number" inputmode="numeric" value="'+esc(item.commission||'')+'" placeholder="0">'+
-      '</div>'+
-      '<div class="scan-comm-acts">'+
-        '<button type="button" class="scan-comm-skip" onclick="cancelScanCommission()">تخطّي</button>'+
-        '<button type="button" class="scan-comm-confirm" onclick="confirmScanCommission('+item.row+')">✓ تأكيد الإسناد</button>'+
-      '</div>';
-    overlay.appendChild(panel);
-    setTimeout(function(){ const i = document.getElementById('scanCommInput'); if(i){ i.focus(); i.select(); } }, 60);
-  }
-
-  function confirmScanCommission(row){
-    const item = PENDING.find(function(x){ return x.row === row; });
-    if(!item){ endScanCommission(); return; }
-    const commInput = document.getElementById('scanCommInput');
-    const comm = commInput ? (Number(commInput.value) || 0) : 0;
-    const hint = document.getElementById('scanAssignHint');
-    const panel = document.getElementById('scanCommPanel');
-    if(panel) panel.querySelectorAll('button').forEach(function(b){ b.disabled = true; });
-
-    // الإسناد ثم تسجيل العمولة — الاتنين مع بعض زي الإسناد اليدوي بالظبط
+    if(String(item.repId) === String(scanAssignRepId)){
+      if(hint) hint.textContent = 'الطلب ده اتسند قبل كده — اتسند '+scanAssignCount;
+      return;
+    }
+    const comm = scanAssignCommission;
+    // الإسناد ثم تسجيل العمولة مع بعض
     callServer('assignRep', [MY_ID, item.row, scanAssignRepId, MY_PIN]).then(function(res){
       if(!(res && res.ok)) throw new Error('assign-failed');
       return callServer('setCommission', [MY_ID, item.row, comm, MY_PIN]);
     }).then(function(){
       scanAssignCount++;
+      scanAssignBreakdown[comm] = (scanAssignBreakdown[comm] || 0) + 1;
       item.repId = scanAssignRepId; item.repName = scanAssignRepName; item.commission = comm;
       if(navigator.vibrate){ try{ navigator.vibrate(40); }catch(e){} }
-      if(hint) hint.textContent = '✅ اتسند: '+item.customer+' — '+scanAssignRepName+' ('+scanAssignCount+')';
-      endScanCommission();
+      if(hint) hint.textContent = '✅ '+item.customer+' — عمولة '+comm+' — اتسند '+scanAssignCount;
     }).catch(function(){
-      if(hint) hint.textContent = '⚠️ حصل خطأ في الإسناد، جرّب تاني';
-      endScanCommission();
+      if(hint) hint.textContent = '⚠️ حصل خطأ، جرّب تاني — اتسند '+scanAssignCount;
     });
-  }
-
-  function cancelScanCommission(){
-    const hint = document.getElementById('scanAssignHint');
-    if(hint) hint.textContent = 'اتخطّى — بتسند لـ '+scanAssignRepName+' ('+scanAssignCount+')';
-    endScanCommission();
-  }
-
-  function endScanCommission(){
-    const panel = document.getElementById('scanCommPanel');
-    if(panel) panel.remove();
-    scanAssignLastCode = '';   // نسمح بإعادة سكان نفس الكود لو احتاج
-    scanAssignPaused = false;   // نكمل السكان للطلب اللي بعده
   }
 
   function closeScanAssign(){
     stopScanner();
-    scanAssignPaused = false;
     const doneCount = scanAssignCount, doneName = scanAssignRepName;
+    const breakdown = scanAssignBreakdown;
     scanAssignRepId = null; scanAssignRepName = ''; scanAssignCount = 0;
-    if(doneCount > 0) showToast('تم إسناد '+doneCount+' طلب لـ '+doneName, 'success');
+    scanAssignCommission = 0; scanAssignBreakdown = {};
+    if(doneCount > 0){
+      const parts = Object.keys(breakdown).map(function(c){ return breakdown[c]+' طلب بعمولة '+c+' ج'; });
+      showScanAssignSummary(doneName, doneCount, parts);
+    }
     load();
+  }
+
+  function showScanAssignSummary(repName, count, parts){
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML =
+      '<div class="modal-box">'+
+        '<div class="summary-emoji">✅</div>'+
+        '<p>تم إسناد '+count+' طلب لـ '+esc(repName)+'</p>'+
+        '<div class="summary-list">'+
+          parts.map(function(p){ return '<div class="summary-row">'+esc(p)+'</div>'; }).join('')+
+        '</div>'+
+        '<div class="modal-actions">'+
+          '<button class="confirm" onclick="this.closest(\'.modal-overlay\').remove()">تمام</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(overlay);
   }
 
   /* ===== دعم السكانر السلكي (زي Syble XB-6221) =====
@@ -1583,9 +1706,8 @@
 
     // شاشة الإسناد بالسكان مفتوحة؟ نتعامل معاه كإسناد لنفس المندوب
     if(scanAssignRepId){
-      if(scanAssignPaused) return; // في نص إدخال عمولة
       const now = Date.now();
-      if(code !== scanAssignLastCode || now - scanAssignLastTime > 2500){
+      if(code !== scanAssignLastCode || now - scanAssignLastTime > 2000){
         scanAssignLastCode = code; scanAssignLastTime = now;
         handleScanAssignHit(code);
       }
