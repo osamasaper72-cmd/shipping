@@ -454,14 +454,19 @@
     .pl-name{font-size:7pt; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
     .pl-price{font-size:7.5pt; font-weight:800; margin:0.3mm 0}
     .pl-phone{font-size:6.5pt; font-weight:600; font-family:'IBM Plex Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+    /* مصدر الشحنة (اسم الشركة اللي جاي منها الطلب) — تحت يمين خالص */
+    .pl-source{direction:rtl; text-align:right; font-size:5pt; font-weight:700; color:#333;
+      font-family:'Tajawal',sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:0}
   }
 
   /* صفوف شحنات المندوب داخل تبويب المناديب */
-  .rep-ship-row{display:flex; align-items:center; justify-content:space-between; gap:8px;
-    padding:8px 0; border-bottom:1px solid var(--line); font-size:13px}
+  .rep-ship-row{padding:8px 0; border-bottom:1px solid var(--line); font-size:13px}
   .rep-ship-row:last-child{border-bottom:0}
+  .rep-ship-top{display:flex; align-items:center; justify-content:space-between; gap:8px}
   .rep-ship-name{flex:1; color:var(--ink); font-weight:600}
   .rep-ship-phone{color:var(--mut); font-size:12px}
+  .rep-ship-money{display:flex; gap:12px; margin-top:6px; font-size:11px; color:var(--mut)}
+  .rep-ship-money b{color:var(--ink); font-weight:800}
 </style>
 </head>
 <body>
@@ -666,7 +671,7 @@
 
   function startPolling(){
     stopPolling();
-    pollTimer = setInterval(silentRefresh, 15000);
+    pollTimer = setInterval(silentRefresh, 60000);
   }
   function stopPolling(){
     if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
@@ -739,8 +744,19 @@
     }
   }
 
+  /* بنسجّل آخر لحظة المستخدم لمس فيها أي حاجة في الشاشة (كتابة، دوس، لمس).
+     الريفرش الصامت بيتأجل تمامًا لو فيه لمسة حديثة، مش بس لو فيه خانة
+     متركّز عليها دلوقتي — عشان لو المستخدم نقل التركيز لحظة (بين خانة
+     المندوب وخانة العمولة مثلًا) الريفرش يوصل في اللحظة دي بالظبط ويلغي
+     اللي هو بيعمله. */
+  let lastInteractionAt = 0;
+  ['input','focus','mousedown','touchstart','change'].forEach(function(evt){
+    document.addEventListener(evt, function(){ lastInteractionAt = Date.now(); }, true);
+  });
+
   function silentRefresh(){
     if(!MY_ID || document.hidden) return;
+    if(Date.now() - lastInteractionAt < 12000) return; // لسه في تفاعل قريب، نأجّل الدورة دي بالكامل
     const activeEl = document.activeElement;
     const isTyping = activeEl && (activeEl.tagName==='INPUT' || activeEl.tagName==='SELECT') &&
       activeEl.id !== 'q' && activeEl.id !== 'q2' && activeEl.id !== 'qa';
@@ -841,7 +857,7 @@
         '<p>أدخل الـ ID بتاعك مرة واحدة بس، والسيستم هيفتكره بعد كده.<br>'+
         'لو مش عارف الـ ID بتاعك، اسأل الأدمن وهيديهولك.</p>'+
         '<input id="idInput" inputmode="numeric" placeholder="اكتب الـ ID هنا">'+
-        '<input id="pinInput" type="password" inputmode="numeric" placeholder="PIN (للأدمن أو مسؤول التوزيع لو مفعّل، سيبه فاضي لو مندوب)">'+
+        '<input id="pinInput" type="password" inputmode="numeric" placeholder="PIN (لو الأدمن حطّلك واحد، سيبه فاضي لو معندكش)">'+
         '<button onclick="tryLogin()">دخول</button>'+
         '<div class="err">'+(err?esc(err):'')+'</div>'+
       '</div>';
@@ -891,17 +907,23 @@
       });
   }
 
-  function waLink(phone){
+  function waLink(phone, amount){
     let p = String(phone).replace(/\D/g,'');
     if(p.indexOf('0') === 0) p = p.substring(1);
     if(p.indexOf('20') !== 0) p = '20'+p;
-    const msg = encodeURIComponent('شحنتك من ' + COMPANY_NAME + ' وصلت، والمندوب في الطريق ليك 🚚');
+    const msg = encodeURIComponent(
+      'شحنتك يافندم من '+COMPANY_NAME+' بسعر '+amount+' ج جاهزة\n'+
+      'جاهز للاستلام ولا لأ؟'
+    );
     return 'https://wa.me/'+p+'?text='+msg;
   }
 
-  function smsLink(phone){
+  function smsLink(phone, amount){
     const p = String(phone).replace(/[^\d+]/g,'');
-    const msg = encodeURIComponent('شحنتك من ' + COMPANY_NAME + ' وصلت، والمندوب في الطريق ليك.');
+    const msg = encodeURIComponent(
+      'شحنتك يافندم من '+COMPANY_NAME+' بسعر '+amount+' ج جاهزة\n'+
+      'جاهز للاستلام ولا لأ؟'
+    );
     return 'sms:'+p+'?body='+msg;
   }
 
@@ -1123,7 +1145,7 @@
       case 'تسليم جزئي':   return {collected:paidAmt, commission:commission};
       case 'رفض و رفض':    return {collected:0, commission:commission};
       case 'رفض و دفع':    return {collected:paidAmt, commission:commission};
-      case 'تهرب':         return {collected:0, commission:commission};
+      case 'تهرب':         return {collected:paidAmt, commission:commission};
       default:             return {collected:0, commission:0};
     }
   }
@@ -1179,14 +1201,14 @@
         '<div class="addrep-field"><label>اسم المندوب</label>'+
           '<input id="addRepName" placeholder="مثلاً: أحمد علي"></div>'+
         '<div class="addrep-field"><label>الكود (اختياري)</label>'+
-          '<input id="addRepId" inputmode="numeric" placeholder="سيبه فاضي عشان يتولّد تلقائي"></div>'+
+          '<input id="addRepId" inputmode="numeric"></div>'+
         '<div class="addrep-field"><label>الدور</label>'+
-          '<select id="addRepRole" onchange="toggleAddRepPin()">'+
+          '<select id="addRepRole">'+
             '<option value="rep">مندوب عادي</option>'+
             '<option value="dispatcher">مسؤول توزيع</option>'+
           '</select></div>'+
-        '<div class="addrep-field" id="addRepPinWrap" hidden><label>PIN (اختياري)</label>'+
-          '<input id="addRepPin" type="password" inputmode="numeric" placeholder="سيبه فاضي لو مش عايز PIN إضافي"></div>'+
+        '<div class="addrep-field"><label>PIN (اختياري)</label>'+
+          '<input id="addRepPin" type="password" inputmode="numeric"></div>'+
         '<div class="modal-actions">'+
           '<button class="cancel" onclick="this.closest(\'.modal-overlay\').remove()">إلغاء</button>'+
           '<button class="confirm" onclick="submitAddRep(this)">✓ إضافة</button>'+
@@ -1194,12 +1216,6 @@
       '</div>';
     document.body.appendChild(overlay);
     setTimeout(function(){ const i = document.getElementById('addRepName'); if(i) i.focus(); }, 60);
-  }
-
-  function toggleAddRepPin(){
-    const roleEl = document.getElementById('addRepRole');
-    const wrap = document.getElementById('addRepPinWrap');
-    if(wrap) wrap.hidden = !(roleEl && roleEl.value === 'dispatcher');
   }
 
   function submitAddRep(btn){
@@ -1426,9 +1442,20 @@
     list.innerHTML = items.map(function(x){
       const isPending = !x.status || x.status === 'جديد';
       const meta = isPending ? {cls:'wait', label:'قيد التنفيذ'} : (STATUS_META[x.status] || {cls:'neutral', label:x.status});
+      const eff = moneyEffectJS(x.status, x.amount, x.commission, x.paidAmt);
+      const net = eff.collected - eff.commission;
+      const moneyLine = isPending ? '' :
+        '<div class="rep-ship-money">'+
+          '<span>محصّل <b>'+eff.collected+' ج</b></span>'+
+          '<span>عمولة <b>'+eff.commission+' ج</b></span>'+
+          '<span>صافي <b>'+net+' ج</b></span>'+
+        '</div>';
       return '<div class="rep-ship-row">'+
-        '<div class="rep-ship-name">'+esc(x.customer)+'<div class="rep-ship-phone mono">'+esc(x.phone||'')+'</div></div>'+
-        '<span class="pill '+meta.cls+'">'+meta.label+'</span>'+
+        '<div class="rep-ship-top">'+
+          '<div class="rep-ship-name">'+esc(x.customer)+'<div class="rep-ship-phone mono">'+esc(x.phone||'')+'</div></div>'+
+          '<span class="pill '+meta.cls+'">'+meta.label+'</span>'+
+        '</div>'+
+        moneyLine+
       '</div>';
     }).join('');
   }
@@ -1647,7 +1674,7 @@
       const phonesHtml = phones.length ? phones.map(function(p){ return '<div class="pl-phone">'+esc(p)+'</div>'; }).join('') : '';
       label.innerHTML =
         '<div class="pl-top">'+
-          '<span class="pl-code">#'+esc(x.code)+'</span>'+
+          '<span class="pl-code">'+esc(x.code)+'</span>'+
           '<span class="pl-brand">'+esc(COMPANY_NAME)+'</span>'+
         '</div>'+
         '<div class="pl-body">'+
@@ -1657,7 +1684,8 @@
             '<div class="pl-price">'+esc(x.amount)+' ج</div>'+
             phonesHtml+
           '</div>'+
-        '</div>';
+        '</div>'+
+        (x.source ? '<div class="pl-source">'+esc(x.source)+'</div>' : '');
       area.appendChild(label);
       try{
         if(window.QRCode){
@@ -2035,8 +2063,8 @@
       h += '<div class="contactRow">'+
         '<span class="phoneNum">'+esc(x.phone)+'</span>'+
         '<a class="cbtn call" href="tel:'+esc(x.phone)+'">'+ICON_CALL+' اتصال</a>'+
-        '<a class="cbtn wa" href="'+waLink(x.phone)+'" target="_blank">'+ICON_WA+' واتساب</a>'+
-        '<a class="cbtn sms" href="'+smsLink(x.phone)+'">'+ICON_SMS+' SMS</a>'+
+        '<a class="cbtn wa" href="'+waLink(x.phone, x.amount)+'" target="_blank">'+ICON_WA+' واتساب</a>'+
+        '<a class="cbtn sms" href="'+smsLink(x.phone, x.amount)+'">'+ICON_SMS+' SMS</a>'+
         '<button class="cbtn copy" onclick="copyText(\''+esc(x.phone)+'\',this)">'+ICON_COPY+'</button>'+
       '</div>';
     }
