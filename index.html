@@ -907,22 +907,22 @@
       });
   }
 
-  function waLink(phone, amount){
+  function waLink(phone, amount, repPhone){
     let p = String(phone).replace(/\D/g,'');
     if(p.indexOf('0') === 0) p = p.substring(1);
     if(p.indexOf('20') !== 0) p = '20'+p;
     const msg = encodeURIComponent(
       'شحنتك يافندم من '+COMPANY_NAME+' بسعر '+amount+' ج جاهزة\n'+
-      'جاهز للاستلام ولا لأ؟'
+      (repPhone ? 'جاهز، برجاء الاتصال برقم المندوب '+repPhone : 'جاهز، وهيتصل بيك المندوب قريب')
     );
     return 'https://wa.me/'+p+'?text='+msg;
   }
 
-  function smsLink(phone, amount){
+  function smsLink(phone, amount, repPhone){
     const p = String(phone).replace(/[^\d+]/g,'');
     const msg = encodeURIComponent(
       'شحنتك يافندم من '+COMPANY_NAME+' بسعر '+amount+' ج جاهزة\n'+
-      'جاهز للاستلام ولا لأ؟'
+      (repPhone ? 'جاهز، برجاء الاتصال برقم المندوب '+repPhone : 'جاهز، وهيتصل بيك المندوب قريب')
     );
     return 'sms:'+p+'?body='+msg;
   }
@@ -2063,8 +2063,8 @@
       h += '<div class="contactRow">'+
         '<span class="phoneNum">'+esc(x.phone)+'</span>'+
         '<a class="cbtn call" href="tel:'+esc(x.phone)+'">'+ICON_CALL+' اتصال</a>'+
-        '<a class="cbtn wa" href="'+waLink(x.phone, x.amount)+'" target="_blank">'+ICON_WA+' واتساب</a>'+
-        '<a class="cbtn sms" href="'+smsLink(x.phone, x.amount)+'">'+ICON_SMS+' SMS</a>'+
+        '<a class="cbtn wa" href="'+waLink(x.phone, x.amount, x.repId)+'" target="_blank">'+ICON_WA+' واتساب</a>'+
+        '<a class="cbtn sms" href="'+smsLink(x.phone, x.amount, x.repId)+'">'+ICON_SMS+' SMS</a>'+
         '<button class="cbtn copy" onclick="copyText(\''+esc(x.phone)+'\',this)">'+ICON_COPY+'</button>'+
       '</div>';
     }
