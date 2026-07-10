@@ -1571,6 +1571,68 @@
     load();
   }
 
+  /* ===== دعم السكانر السلكي (زي Syble XB-6221) =====
+     السكانر بيكتب الكود بسرعة كأنه كيبورد وبينهيه بـ Enter. المشكلة إن لو
+     المؤشر مش واقف في خانة البحث، الكلام كان بيروح في الفراغ. هنا بنلتقط
+     إدخال السكانر على مستوى الصفحة كلها (بنفرّقه عن الكتابة البشرية إنه
+     بيجي سريع جدًا وبينتهي بـEnter)، وبنوجّهه حسب الشاشة المفتوحة:
+     شاشة الإسناد → إسناد، خانة بحث → بحث. */
+  function handleUsbScan(code){
+    code = String(code || '').trim();
+    if(!code) return;
+
+    // شاشة الإسناد بالسكان مفتوحة؟ نتعامل معاه كإسناد لنفس المندوب
+    if(scanAssignRepId){
+      if(scanAssignPaused) return; // في نص إدخال عمولة
+      const now = Date.now();
+      if(code !== scanAssignLastCode || now - scanAssignLastTime > 2500){
+        scanAssignLastCode = code; scanAssignLastTime = now;
+        handleScanAssignHit(code);
+      }
+      return;
+    }
+    // شاشة سكان كاميرا مفردة مفتوحة؟ نكمّل بنفس مسارها
+    if(SCAN_TARGET){
+      onScanSuccess(code, SCAN_TARGET.inputId, SCAN_TARGET.filterFnName);
+      return;
+    }
+    // الوضع العادي: نحط الكود في خانة البحث الظاهرة ونشغّل الفلترة
+    const qEl = document.getElementById('q');
+    const q2El = document.getElementById('q2');
+    const qaEl = document.getElementById('qa');
+    const box = qEl || q2El || qaEl;
+    if(box){
+      box.value = code;
+      if(qEl) filterPending(); else if(q2El) filterDone(); else if(qaEl) filterAssigned();
+      try{ box.scrollIntoView({ block: 'center' }); }catch(e){}
+    } else {
+      showToast('اتلقط كود: '+code, 'success');
+    }
+  }
+
+  (function initUsbScanner(){
+    let buf = '', lastTime = 0;
+    document.addEventListener('keydown', function(e){
+      if(e.ctrlKey || e.altKey || e.metaKey) return;
+      const now = Date.now();
+      // فجوة أكبر من 60 مللي بين الحروف = إدخال بشري (مش سكانر)، نبدأ من جديد.
+      // السكانر بيرمي الحروف بسرعة كبيرة (فرق مللي ثوانٍ قليلة بينها).
+      if(now - lastTime > 60) buf = '';
+      lastTime = now;
+
+      if(e.key === 'Enter'){
+        // بنعتبره سكان بس لو اتجمّع طول كافي بسرعة (كود الطلب مش قصير)
+        if(buf.length >= 5){
+          handleUsbScan(buf);
+          e.preventDefault();
+        }
+        buf = '';
+        return;
+      }
+      if(e.key && e.key.length === 1) buf += e.key;
+    }, true);
+  })();
+
   function actsBlock(row, adminOverride){
     const ov = adminOverride ? ',true' : '';
     return '<div class="acts">'+
