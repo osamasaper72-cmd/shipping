@@ -418,6 +418,25 @@
 
   /* مودال اختيار الشحنات للطباعة */
   .printsel-box{max-width:400px; text-align:right}
+
+  /* شاشة ملخص تقفيل حساب المندوب */
+  .settle-box{max-width:420px}
+  .settle-summary-top{display:flex; gap:8px; margin-bottom:14px}
+  .settle-stat{flex:1; text-align:center; background:var(--bg); border-radius:12px; padding:12px 6px}
+  .settle-stat b{display:block; font-size:20px; font-weight:800; color:var(--ink)}
+  .settle-stat span{font-size:11px; color:var(--mut)}
+  .settle-stat.go b{color:var(--go)}
+  .settle-stat.wait b{color:var(--partial)}
+  .settle-breakdown{margin-bottom:14px; max-height:26vh; overflow-y:auto}
+  .settle-row{display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--line); font-size:13px}
+  .settle-row:last-child{border-bottom:0}
+  .settle-row b{color:var(--ink)}
+  .settle-money{display:flex; justify-content:space-around; background:var(--bg); border-radius:12px;
+    padding:12px; margin-bottom:14px; font-size:13px; color:var(--mut)}
+  .settle-money b{display:block; color:var(--ink); font-size:15px; font-weight:800; margin-top:2px}
+  .scan-checkin-btn{display:flex; align-items:center; justify-content:center; gap:6px; width:100%;
+    padding:12px; margin-bottom:14px; border-radius:12px; border:0; background:var(--partial);
+    color:#06182a; font-family:inherit; font-size:13px; font-weight:800}
   .printsel-box p{text-align:center}
   .printsel-list{max-height:50vh; overflow-y:auto; margin-bottom:14px; text-align:right}
   .printsel-box .search{margin-bottom:8px}
@@ -507,8 +526,14 @@
     'تهرب':         {cls:'dodge',   label:'🏃 تهرب'},
     'لا يرد':       {cls:'neutral', label:'🔇 لا يرد'},
     'لاغي':         {cls:'cancel',  label:'🚫 لاغي'},
-    'تأجيل':        {cls:'wait',    label:'⏳ تأجيل'}
+    'تأجيل':        {cls:'wait',    label:'⏳ تأجيل'},
+    'مغلق':         {cls:'neutral', label:'📵 مغلق'}
   };
+
+  // مجموعتين الأوردرات اللي "راجعة" (مش متسلّمة): دي بتتقسّم لتبويبين
+  // "موجود في المخزن" (تأجيل/مغلق/لا يرد) و"مرتجعات" (باقي حالات الرفض)
+  const WAREHOUSE_STATUSES = ['تأجيل', 'مغلق', 'لا يرد'];
+  const RETURN_STATUSES = ['رفض و دفع', 'رفض و رفض', 'لاغي', 'تهرب'];
 
   /* ===== نداء الـ API =====
      بنبعت GET للـ Apps Script مع fn و args في الرابط.
@@ -735,12 +760,18 @@
     const isMgr = (d.role==='admin' || d.role==='dispatcher');
     const unassignedCount = isMgr ? (d.pending||[]).filter(function(x){return !isFullyAssigned(x);}).length : 0;
     const assignedCount = isMgr ? (d.pending||[]).filter(isFullyAssigned).length : 0;
+    const warehouseCount = isMgr ? countByStatusGroup_(WAREHOUSE_STATUSES) : 0;
+    const returnsCount = isMgr ? countByStatusGroup_(RETURN_STATUSES) : 0;
     const bar = document.getElementById('mainTabsBar');
     if(bar){
       const pendBtn = bar.querySelector('[data-tab="pending"]');
       if(pendBtn) pendBtn.textContent = 'قيد التنفيذ'+(isMgr && unassignedCount ? ' ('+unassignedCount+')':'');
       const asgBtn = bar.querySelector('[data-tab="assigned"]');
       if(asgBtn) asgBtn.textContent = 'قيد التوصيل'+(assignedCount ? ' ('+assignedCount+')':'');
+      const whBtn = bar.querySelector('[data-tab="warehouse"]');
+      if(whBtn) whBtn.textContent = 'موجود في المخزن'+(warehouseCount?' ('+warehouseCount+')':'');
+      const rtBtn = bar.querySelector('[data-tab="returns"]');
+      if(rtBtn) rtBtn.textContent = 'مرتجعات'+(returnsCount?' ('+returnsCount+')':'');
     }
 
     refreshMgrActionsBar();
@@ -803,7 +834,7 @@
     // يشوف النتيجة على طول، حتى لو مفيش فرق واضح في التوقيع).
     const relevantChanged = opts.force ? true : (
       (MAIN_TAB === 'pending' || MAIN_TAB === 'assigned') ? pendingChanged :
-      (MAIN_TAB === 'reps') ? (pendingChanged || doneChanged) :
+      (MAIN_TAB === 'reps' || MAIN_TAB === 'warehouse' || MAIN_TAB === 'returns') ? (pendingChanged || doneChanged) :
       (ROLE !== 'admin' && ROLE !== 'dispatcher') ? doneChanged :
       (SUB_TAB === 'collect') ? (pendingChanged || doneChanged) : doneChanged
     );
@@ -819,6 +850,8 @@
 
     if(MAIN_TAB === 'pending') filterPending();
     else if(MAIN_TAB === 'assigned') filterAssigned();
+    else if(MAIN_TAB === 'warehouse') filterWarehouse();
+    else if(MAIN_TAB === 'returns') filterReturns();
     else if(MAIN_TAB === 'reps'){
       renderRepsTab(document.getElementById('repsList'));
       if(repState) restoreRepDetailsState(repState);
@@ -1038,10 +1071,14 @@
     const tab2Label = isMgr ? 'تم التنفيذ' : 'تم التسليم';
     const unassignedCount = isMgr ? PENDING.filter(function(x){return !isFullyAssigned(x);}).length : 0;
     const assignedCount = isMgr ? PENDING.filter(isFullyAssigned).length : 0;
+    const warehouseCount = isMgr ? countByStatusGroup_(WAREHOUSE_STATUSES) : 0;
+    const returnsCount = isMgr ? countByStatusGroup_(RETURN_STATUSES) : 0;
     html += '<div class="tabs" id="mainTabsBar">'+
       '<button class="tab '+(MAIN_TAB==='pending'?'active':'')+'" data-tab="pending" onclick="switchMain(\'pending\')">'+tab1Label+(isMgr && unassignedCount ? ' ('+unassignedCount+')':'')+'</button>'+
       (isMgr ? '<button class="tab '+(MAIN_TAB==='assigned'?'active':'')+'" data-tab="assigned" onclick="switchMain(\'assigned\')">قيد التوصيل'+(assignedCount ? ' ('+assignedCount+')':'')+'</button>' : '')+
       '<button class="tab '+(MAIN_TAB==='done'?'active':'')+'" data-tab="done" onclick="switchMain(\'done\')">'+tab2Label+'</button>'+
+      (isMgr ? '<button class="tab '+(MAIN_TAB==='warehouse'?'active':'')+'" data-tab="warehouse" onclick="switchMain(\'warehouse\')">موجود في المخزن'+(warehouseCount?' ('+warehouseCount+')':'')+'</button>' : '')+
+      (isMgr ? '<button class="tab '+(MAIN_TAB==='returns'?'active':'')+'" data-tab="returns" onclick="switchMain(\'returns\')">مرتجعات'+(returnsCount?' ('+returnsCount+')':'')+'</button>' : '')+
       (isMgr ? '<button class="tab '+(MAIN_TAB==='reps'?'active':'')+'" data-tab="reps" onclick="switchMain(\'reps\')">المناديب</button>' : '')+
       '</div>';
 
@@ -1108,7 +1145,7 @@
   }
 
   function tabOrder(){
-    return (ROLE==='admin' || ROLE==='dispatcher') ? ['pending','assigned','done','reps'] : ['pending','done'];
+    return (ROLE==='admin' || ROLE==='dispatcher') ? ['pending','assigned','done','warehouse','returns','reps'] : ['pending','done'];
   }
 
   function switchMain(tab){
@@ -1162,6 +1199,24 @@
     if(MAIN_TAB === 'reps' && isMgr){
       body.innerHTML = '<div id="repsList" class="'+animClass+'"></div>';
       renderRepsTab(document.getElementById('repsList'));
+      return;
+    }
+
+    if(MAIN_TAB === 'warehouse' && isMgr){
+      body.innerHTML =
+        '<div class="searchRow"><input id="qw" class="search" placeholder="بحث بالاسم أو الموبايل أو الكود" oninput="filterWarehouse()">'+
+        '<button type="button" class="scanBtn" onclick="openCameraScan(\'qw\',\'filterWarehouse\')">'+SCAN_ICON+'</button></div>'+
+        '<div id="warehouseList" class="'+animClass+'"></div>';
+      filterWarehouse();
+      return;
+    }
+
+    if(MAIN_TAB === 'returns' && isMgr){
+      body.innerHTML =
+        '<div class="searchRow"><input id="qr" class="search" placeholder="بحث بالاسم أو الموبايل أو الكود" oninput="filterReturns()">'+
+        '<button type="button" class="scanBtn" onclick="openCameraScan(\'qr\',\'filterReturns\')">'+SCAN_ICON+'</button></div>'+
+        '<div id="returnsList" class="'+animClass+'"></div>';
+      filterReturns();
       return;
     }
 
@@ -1493,11 +1548,14 @@
       const meta = isPending ? {cls:'wait', label:'قيد التنفيذ'} : (STATUS_META[x.status] || {cls:'neutral', label:x.status});
       const eff = moneyEffectJS(x.status, x.amount, x.commission, x.paidAmt);
       const net = eff.collected - eff.commission;
-      const moneyLine = isPending ? '' :
+      const moneyLine =
         '<div class="rep-ship-money">'+
-          '<span>محصّل <b>'+eff.collected+' ج</b></span>'+
-          '<span>عمولة <b>'+eff.commission+' ج</b></span>'+
-          '<span>صافي <b>'+net+' ج</b></span>'+
+          '<span>سعر الطلب <b>'+esc(x.amount)+' ج</b></span>'+
+          (isPending ? '' :
+            '<span>محصّل <b>'+eff.collected+' ج</b></span>'+
+            '<span>عمولة <b>'+eff.commission+' ج</b></span>'+
+            '<span>صافي <b>'+net+' ج</b></span>'
+          )+
         '</div>';
       return '<div class="rep-ship-row">'+
         '<div class="rep-ship-top">'+
@@ -1539,23 +1597,138 @@
       'قفل الحساب</button></div>').join('');
   }
 
+  /* أول ما تدوس "قفل الحساب"، مش بنقفل على طول — بنجيب ملخص كامل الأول
+     (كام طلب، كام اتسلّم، الباقي بحالاته، والفلوس)، وبنديك خيار "تقفيل
+     بالإسكانر" عشان تسجّل رجوع الطرود الفعلي قبل ما تأكّد. */
   function closeAccount(btn, repId, repName){
-    showConfirm('تأكيد استلام الكاش من '+repName+'؟\nهيتقفل الحساب ومش هترجع تعدّله.')
-      .then(function(ok){
-        if(!ok) return;
-        btn.disabled = true; btn.textContent = 'جارِ القفل…';
-        callServer('closeRepAccount', [MY_ID, repId, MY_PIN])
-          .then(function(r){
-            if(r.ok){
-              showToast('تم ✅ '+r.repName+' — '+r.count+' شحنة — '+r.amount+' ج', 'success');
-              load();
-            } else { showToast(r.error, 'error'); btn.disabled = false; btn.textContent = 'قفل الحساب'; }
-          })
-          .catch(function(e){
-            showToast('خطأ: '+e.message, 'error');
-            btn.disabled = false; btn.textContent = 'قفل الحساب';
-          });
-      });
+    btn.disabled = true; btn.textContent = 'جارِ التحميل…';
+    callServer('getRepSettlementSummary', [MY_ID, repId, MY_PIN]).then(function(r){
+      btn.disabled = false; btn.textContent = 'قفل الحساب';
+      if(!r.ok){ showToast(r.error || 'حصل خطأ', 'error'); return; }
+      showSettlementSummary(repId, repName, r);
+    }).catch(function(){
+      btn.disabled = false; btn.textContent = 'قفل الحساب';
+      showToast('مفيش نت، جرّب تاني', 'error');
+    });
+  }
+
+  function showSettlementSummary(repId, repName, sum){
+    document.querySelectorAll('.modal-overlay').forEach(function(o){ o.remove(); });
+    const rows = Object.keys(sum.byStatus).map(function(st){
+      const meta = STATUS_META[st] || {label: st};
+      return '<div class="settle-row"><span>'+meta.label+'</span><b>'+sum.byStatus[st]+'</b></div>';
+    }).join('');
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML =
+      '<div class="modal-box settle-box">'+
+        '<p>حساب '+esc(repName)+'</p>'+
+        '<div class="settle-summary-top">'+
+          '<div class="settle-stat"><b>'+sum.total+'</b><span>إجمالي الطلبات</span></div>'+
+          '<div class="settle-stat go"><b>'+sum.delivered+'</b><span>اتسلّمت</span></div>'+
+          '<div class="settle-stat wait"><b>'+sum.remaining+'</b><span>لسه راجعة</span></div>'+
+        '</div>'+
+        (rows ? '<div class="settle-breakdown">'+rows+'</div>' : '')+
+        '<div class="settle-money">'+
+          '<span>تحصيل <b>'+sum.collected+' ج</b></span>'+
+          '<span>عمولة <b>'+sum.commission+' ج</b></span>'+
+          '<span>صافي <b>'+sum.net+' ج</b></span>'+
+        '</div>'+
+        (sum.remaining > 0 ? '<button type="button" class="scan-checkin-btn" onclick="openScanCheckin(\''+
+          esc(repId).replace(/'/g,"\\'")+'\',\''+esc(repName).replace(/'/g,"\\'")+'\')">'+SCAN_ICON+
+          ' تقفيل بالإسكانر ('+sum.remaining+' لسه محتاجين رجوع)</button>' : '')+
+        '<div class="modal-actions">'+
+          '<button class="cancel" onclick="this.closest(\'.modal-overlay\').remove()">إلغاء</button>'+
+          '<button class="confirm" onclick="confirmCloseAccount(this,\''+esc(repId).replace(/'/g,"\\'")+
+            '\',\''+esc(repName).replace(/'/g,"\\'")+'\')">✓ تأكيد القفل</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(overlay);
+  }
+
+  function confirmCloseAccount(btn, repId, repName){
+    showConfirm('تأكيد استلام الكاش من '+repName+'؟\nهيتقفل الحساب ومش هترجع تعدّله.').then(function(ok){
+      if(!ok) return;
+      const overlay = btn.closest('.modal-overlay');
+      overlay.querySelectorAll('button').forEach(function(b){ b.disabled = true; });
+      callServer('closeRepAccount', [MY_ID, repId, MY_PIN])
+        .then(function(r){
+          if(r.ok){
+            overlay.remove();
+            showToast('تم ✅ '+r.repName+' — '+r.count+' شحنة — '+r.amount+' ج', 'success');
+            load();
+          } else {
+            overlay.querySelectorAll('button').forEach(function(b){ b.disabled = false; });
+            showToast(r.error, 'error');
+          }
+        })
+        .catch(function(e){
+          overlay.querySelectorAll('button').forEach(function(b){ b.disabled = false; });
+          showToast('خطأ: '+e.message, 'error');
+        });
+    });
+  }
+
+  /* ===== تقفيل بالإسكانر: سكان الطرود الراجعة (تأجيل/مغلق/لا يرد/مرتجعات)
+     من مندوب معيّن، كل طرد بيتسجّل رجوعه للمخزن فورًا وبيختفي من قائمة
+     "لسه محتاج يرجع" لحد ما يتفضل بس اللي اتسلّم. ===== */
+  let checkinRepId = null, checkinRepName = '', checkinCount = 0;
+
+  function openScanCheckin(repId, repName){
+    document.querySelectorAll('.modal-overlay').forEach(function(o){ o.remove(); });
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      showToast('الكاميرا مش متاحة في المتصفح ده', 'error'); return;
+    }
+    checkinRepId = repId; checkinRepName = repName; checkinCount = 0;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'scan-overlay';
+    overlay.innerHTML =
+      '<div class="scan-video-wrap"><div id="qrReader"></div>'+
+        '<button class="scan-close" onclick="closeScanCheckin()">✕</button>'+
+      '</div>'+
+      '<div class="scan-hint" id="checkinHint">سكان الطرود الراجعة من '+esc(repName)+' — 0 اتسجّل</div>'+
+      '<div class="scan-manual">'+
+        '<input id="scanManualInput" placeholder="أو اكتب الكود يدويًا" inputmode="numeric">'+
+        '<button type="button" onclick="submitManualCheckin()">تأكيد</button>'+
+      '</div>';
+    document.body.appendChild(overlay);
+
+    startScanner(function(code){ handleCheckinHit(code); });
+  }
+
+  function submitManualCheckin(){
+    const inp = document.getElementById('scanManualInput');
+    const code = inp ? inp.value.trim() : '';
+    if(!code) return;
+    inp.value = '';
+    handleCheckinHit(code);
+  }
+
+  function handleCheckinHit(code){
+    const hint = document.getElementById('checkinHint');
+    callServer('checkInReturn', [MY_ID, checkinRepId, code, MY_PIN]).then(function(r){
+      if(r.ok){
+        checkinCount++;
+        if(navigator.vibrate){ try{ navigator.vibrate(40); }catch(e){} }
+        const meta = STATUS_META[r.status] || {label: r.status};
+        if(hint) hint.textContent = '✅ '+r.customer+' — '+meta.label+' — اتسجّل '+checkinCount;
+      } else {
+        if(navigator.vibrate){ try{ navigator.vibrate([30,50,30]); }catch(e){} }
+        if(hint) hint.textContent = '⚠️ '+r.error+' — اتسجّل '+checkinCount;
+      }
+    }).catch(function(){
+      if(hint) hint.textContent = '⚠️ مفيش نت، جرّب تاني — اتسجّل '+checkinCount;
+    });
+  }
+
+  function closeScanCheckin(){
+    stopScanner();
+    const doneCount = checkinCount, name = checkinRepName;
+    checkinRepId = null; checkinRepName = ''; checkinCount = 0;
+    if(doneCount > 0) showToast('اتسجّل رجوع '+doneCount+' طرد من '+name, 'success');
+    load();
   }
 
   function filterPending(){
@@ -1602,6 +1775,42 @@
     if(!list) return;
     let items = DONE;
     if(STATUS_FILTER !== 'all') items = items.filter(x => x.status === STATUS_FILTER);
+    if(q) items = items.filter(x => matchQ(x, q));
+    list.innerHTML = items.length ? items.map(function(x,i){ return card(x, ROLE, true, i); }).join('')
+      : '<div class="center"><div class="empty-ill">🔍</div><b>مفيش نتائج</b></div>';
+  }
+
+  // بيعدّ الأوردرات اللي "اتفرزت" فعليًا (اتسكنت ورجعت للمخزن) وحالتها ضمن
+  // مجموعة معينة — مش كل أوردر بالحالة دي، بس اللي اتأكد رجوعه فعليًا.
+  function countByStatusGroup_(statuses){
+    return DONE.filter(function(x){ return x.checkedIn && statuses.indexOf(x.status) > -1; }).length;
+  }
+
+  function filterWarehouse(){
+    const box = document.getElementById('qw');
+    const q = box ? box.value.trim() : '';
+    const list = document.getElementById('warehouseList');
+    if(!list) return;
+    let items = DONE.filter(function(x){ return x.checkedIn && WAREHOUSE_STATUSES.indexOf(x.status) > -1; });
+    if(!items.length){
+      list.innerHTML = '<div class="center"><div class="empty-ill">📦</div><b>لسه مفيش حاجة في المخزن</b>الطلبات اللي بترجع (تأجيل/مغلق/لا يرد) بعد ما تتسكن وقت تقفيل حساب المندوب هتظهر هنا.</div>';
+      return;
+    }
+    if(q) items = items.filter(x => matchQ(x, q));
+    list.innerHTML = items.length ? items.map(function(x,i){ return card(x, ROLE, true, i); }).join('')
+      : '<div class="center"><div class="empty-ill">🔍</div><b>مفيش نتائج</b></div>';
+  }
+
+  function filterReturns(){
+    const box = document.getElementById('qr');
+    const q = box ? box.value.trim() : '';
+    const list = document.getElementById('returnsList');
+    if(!list) return;
+    let items = DONE.filter(function(x){ return x.checkedIn && RETURN_STATUSES.indexOf(x.status) > -1; });
+    if(!items.length){
+      list.innerHTML = '<div class="center"><div class="empty-ill">↩️</div><b>لسه مفيش مرتجعات</b>الطلبات اللي بترجع (رفض/تهرب/لاغي) بعد ما تتسكن وقت تقفيل حساب المندوب هتظهر هنا.</div>';
+      return;
+    }
     if(q) items = items.filter(x => matchQ(x, q));
     list.innerHTML = items.length ? items.map(function(x,i){ return card(x, ROLE, true, i); }).join('')
       : '<div class="center"><div class="empty-ill">🔍</div><b>مفيش نتائج</b></div>';
@@ -2081,6 +2290,7 @@
       '<button class="partial" onclick="setStatus(this,'+row+',\'رفض و دفع\''+ov+')">رفض و دفع</button>'+
       '<button class="dodge" onclick="setStatus(this,'+row+',\'تهرب\''+ov+')">تهرب</button>'+
       '<button class="neutral" onclick="setStatus(this,'+row+',\'لا يرد\''+ov+')">لا يرد</button>'+
+      '<button class="neutral" onclick="setStatus(this,'+row+',\'مغلق\''+ov+')">مغلق</button>'+
       '<button class="cancel" onclick="setStatus(this,'+row+',\'لاغي\''+ov+')">لاغي</button>'+
       '<button class="wait full" onclick="setStatus(this,'+row+',\'تأجيل\''+ov+')">تأجيل</button>'+
     '</div>';
