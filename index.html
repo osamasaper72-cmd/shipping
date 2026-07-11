@@ -67,6 +67,9 @@
   .money3 div span{display:block; font-size:11px; color:var(--mut); margin-bottom:4px}
   .money3 div b{font-size:16px; font-weight:800}
   .money3 .c1 b{color:var(--go)} .money3 .c2 b{color:var(--wait)} .money3 .c3 b{color:#5bc8ff}
+  .daily-btn{display:block; width:100%; padding:9px; margin-bottom:12px; border-radius:10px;
+    border:1px solid var(--line); background:transparent; color:var(--mut);
+    font-family:inherit; font-size:12px; font-weight:700}
 
   .gen{width:100%; border:0; border-radius:12px; padding:14px; font-family:inherit;
     font-size:15px; font-weight:700; margin-bottom:12px; color:#06241c; background:var(--go)}
@@ -367,6 +370,23 @@
   .scan-topbar-comm input{width:80px; height:38px; border-radius:9px; border:1px solid #2a3744;
     background:#111820; color:#fff; text-align:center; font-family:inherit; font-size:16px; font-weight:800}
   .scan-start-hint{font-size:12px; color:var(--mut); text-align:center; margin-bottom:14px; line-height:1.5}
+
+  /* اختيار كاميرا / سكانر USB قبل بدء أي جلسة سكان */
+  .mode-choice{display:flex; gap:10px; margin-bottom:14px}
+  .mode-btn{flex:1; display:flex; flex-direction:column; align-items:center; gap:6px;
+    padding:16px 8px; border-radius:14px; border:1px solid var(--line); background:var(--bg);
+    color:var(--ink); font-family:inherit; font-size:12px; font-weight:700}
+  .mode-btn{font-size:26px}
+  .mode-btn span{font-size:12px; font-weight:700}
+  .mode-btn:active{background:var(--card); border-color:var(--go)}
+
+  /* شاشة السكانر الخارجي (من غير كاميرا) */
+  .scan-usb-wrap{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; padding:30px; text-align:center}
+  .scan-usb-icon{font-size:56px}
+  .scan-usb-text{color:#fff; font-size:14px; line-height:1.7; opacity:.85}
+  .scan-close-usb{margin:0 16px 16px; padding:12px; border-radius:12px; border:1px solid #333;
+    background:#181818; color:#fff; font-family:inherit; font-size:14px; font-weight:700}
   .summary-emoji{font-size:44px; text-align:center; margin-bottom:6px}
   .summary-list{margin:12px 0; text-align:center}
   .summary-row{padding:8px; border-radius:9px; background:var(--bg); margin-bottom:6px;
@@ -434,6 +454,7 @@
   .settle-money{display:flex; justify-content:space-around; background:var(--bg); border-radius:12px;
     padding:12px; margin-bottom:14px; font-size:13px; color:var(--mut)}
   .settle-money b{display:block; color:var(--ink); font-size:15px; font-weight:800; margin-top:2px}
+  .daily-since{text-align:center; font-size:11px; color:var(--mut); margin-bottom:14px}
   .scan-checkin-btn{display:flex; align-items:center; justify-content:center; gap:6px; width:100%;
     padding:12px; margin-bottom:14px; border-radius:12px; border:0; background:var(--partial);
     color:#06182a; font-family:inherit; font-size:13px; font-weight:800}
@@ -1067,6 +1088,10 @@
       '<div class="c3"><span>الصافي</span><b id="statNet">'+s.net+' ج</b></div>'+
       '</div>';
 
+    if(isMgr){
+      html += '<button class="daily-btn" onclick="openDailyCounter()">📅 تحصيل اليوم</button>';
+    }
+
     const tab1Label = 'قيد التنفيذ';
     const tab2Label = isMgr ? 'تم التنفيذ' : 'تم التسليم';
     const unassignedCount = isMgr ? PENDING.filter(function(x){return !isFullyAssigned(x);}).length : 0;
@@ -1099,7 +1124,9 @@
     const isMgr = (ROLE==='admin' || ROLE==='dispatcher');
     if(!isMgr) return '';
     let h = '';
-    h += '<button class="gen importbtn" onclick="openImportExcel()">＋ استيراد إكسل شركة</button>';
+    if(ROLE === 'admin'){
+      h += '<button class="gen importbtn" onclick="openImportExcel()">＋ استيراد إكسل شركة</button>';
+    }
 
     const noCode = PENDING.filter(function(x){ return !x.code; }).length;
     if(MAIN_TAB==='pending' && noCode>0){
@@ -1584,6 +1611,71 @@
     }
   }
 
+  /* ===== عداد تحصيل اليوم (أدمن/مسؤول توزيع) =====
+     بيتحسب على السيرفر ونقطة البداية متخزنة مركزيًا (مش على الجهاز)، فبيبان
+     نفس الرقم على أي جهاز يفتح بيه أي حد. افتراضيًا بيبدأ من أول النهاردة،
+     ولو حد صفّره بيتحدّث لكل الأجهزة من لحظة التصفير. */
+  function openDailyCounter(){
+    document.querySelectorAll('.modal-overlay').forEach(function(o){ o.remove(); });
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML =
+      '<div class="modal-box">'+
+        '<p>تحصيل اليوم</p>'+
+        '<div class="settle-money" id="dailyCounterBody"><span>جارِ التحميل…</span></div>'+
+        '<div class="daily-since" id="dailySinceText"></div>'+
+        '<div class="modal-actions">'+
+          '<button class="cancel" onclick="resetDailyCounter(this)">↺ تصفير العداد</button>'+
+          '<button class="confirm" onclick="this.closest(\'.modal-overlay\').remove()">تمام</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(overlay);
+    loadDailyCounter();
+  }
+
+  function loadDailyCounter(){
+    callServer('getDailyCounter', [MY_ID, MY_PIN]).then(function(r){
+      const body = document.getElementById('dailyCounterBody');
+      const sinceEl = document.getElementById('dailySinceText');
+      if(!r.ok){
+        if(body) body.innerHTML = '<span>'+(r.error||'حصل خطأ')+'</span>';
+        return;
+      }
+      if(body){
+        body.innerHTML =
+          '<span>تحصيل <b>'+r.collected+' ج</b></span>'+
+          '<span>عمولة <b>'+r.commission+' ج</b></span>'+
+          '<span>صافي <b>'+r.net+' ج</b></span>';
+      }
+      if(sinceEl){
+        const d = new Date(r.since);
+        sinceEl.textContent = 'بيتحسب من: '+d.toLocaleString('ar-EG', { hour:'2-digit', minute:'2-digit', day:'numeric', month:'numeric' });
+      }
+    }).catch(function(){
+      const body = document.getElementById('dailyCounterBody');
+      if(body) body.innerHTML = '<span>مفيش نت، جرّب تاني</span>';
+    });
+  }
+
+  function resetDailyCounter(btn){
+    showConfirm('تصفير عداد تحصيل اليوم؟ هيبدأ يعدّ من دلوقتي على كل الأجهزة.').then(function(ok){
+      if(!ok) return;
+      btn.disabled = true;
+      callServer('resetDailyCounter', [MY_ID, MY_PIN]).then(function(r){
+        btn.disabled = false;
+        if(r.ok){
+          showToast('اتصفّر العداد ✅', 'success');
+          loadDailyCounter();
+        } else {
+          showToast(r.error || 'حصل خطأ', 'error');
+        }
+      }).catch(function(){
+        btn.disabled = false;
+        showToast('مفيش نت، جرّب تاني', 'error');
+      });
+    });
+  }
+
   function renderBalances(container){
     if(!BALANCES.length){
       container.innerHTML = '<div class="center"><div class="empty-ill">👌</div><b>كله مقفول</b>مفيش حد عليه فلوس لسه.</div>';
@@ -1677,25 +1769,59 @@
 
   function openScanCheckin(repId, repName){
     document.querySelectorAll('.modal-overlay').forEach(function(o){ o.remove(); });
-    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML =
+      '<div class="modal-box">'+
+        '<p>هتسكان بإيه؟</p>'+
+        '<div class="mode-choice">'+
+          '<button type="button" class="mode-btn" onclick="startScanCheckin(\''+esc(repId).replace(/'/g,"\\'")+'\',\''+esc(repName).replace(/'/g,"\\'")+'\',\'camera\')">📷<span>كاميرا الموبايل</span></button>'+
+          '<button type="button" class="mode-btn" onclick="startScanCheckin(\''+esc(repId).replace(/'/g,"\\'")+'\',\''+esc(repName).replace(/'/g,"\\'")+'\',\'usb\')">🔌<span>سكانر USB خارجي</span></button>'+
+        '</div>'+
+        '<div class="modal-actions">'+
+          '<button class="cancel" onclick="this.closest(\'.modal-overlay\').remove()">إلغاء</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(overlay);
+  }
+
+  /* نفس مبدأ الحل بتاع الإسناد بالسكان: لو USB، الكاميرا متتفتحش خالص
+     عشان مايحصلش تعارض بينها وبين السكانر الخارجي. */
+  function startScanCheckin(repId, repName, mode){
+    document.querySelectorAll('.modal-overlay').forEach(function(o){ o.remove(); });
+    if(mode === 'camera' && (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)){
       showToast('الكاميرا مش متاحة في المتصفح ده', 'error'); return;
     }
     checkinRepId = repId; checkinRepName = repName; checkinCount = 0;
 
     const overlay = document.createElement('div');
     overlay.className = 'scan-overlay';
-    overlay.innerHTML =
-      '<div class="scan-video-wrap"><div id="qrReader"></div>'+
-        '<button class="scan-close" onclick="closeScanCheckin()">✕</button>'+
-      '</div>'+
-      '<div class="scan-hint" id="checkinHint">سكان الطرود الراجعة من '+esc(repName)+' — 0 اتسجّل</div>'+
-      '<div class="scan-manual">'+
-        '<input id="scanManualInput" placeholder="أو اكتب الكود يدويًا" inputmode="numeric">'+
-        '<button type="button" onclick="submitManualCheckin()">تأكيد</button>'+
-      '</div>';
-    document.body.appendChild(overlay);
-
-    startScanner(function(code){ handleCheckinHit(code); });
+    if(mode === 'camera'){
+      overlay.innerHTML =
+        '<div class="scan-video-wrap"><div id="qrReader"></div>'+
+          '<button class="scan-close" onclick="closeScanCheckin()">✕</button>'+
+        '</div>'+
+        '<div class="scan-hint" id="checkinHint">سكان الطرود الراجعة من '+esc(repName)+' — 0 اتسجّل</div>'+
+        '<div class="scan-manual">'+
+          '<input id="scanManualInput" placeholder="أو اكتب الكود يدويًا" inputmode="numeric">'+
+          '<button type="button" onclick="submitManualCheckin()">تأكيد</button>'+
+        '</div>';
+      document.body.appendChild(overlay);
+      startScanner(function(code){ handleCheckinHit(code); });
+    } else {
+      overlay.innerHTML =
+        '<div class="scan-usb-wrap">'+
+          '<div class="scan-usb-icon">🔌</div>'+
+          '<div class="scan-usb-text">وجّه السكانر الخارجي على كود الطرد الراجع من '+esc(repName)+' وسكان<br>الكاميرا مقفولة عشان منعارضش السكانر</div>'+
+        '</div>'+
+        '<div class="scan-hint" id="checkinHint">جاهز — 0 اتسجّل</div>'+
+        '<div class="scan-manual">'+
+          '<input id="scanManualInput" placeholder="أو اكتب الكود يدويًا" inputmode="numeric">'+
+          '<button type="button" onclick="submitManualCheckin()">تأكيد</button>'+
+        '</div>'+
+        '<button class="scan-close-usb" onclick="closeScanCheckin()">✕ إنهاء</button>';
+      document.body.appendChild(overlay);
+    }
   }
 
   function submitManualCheckin(){
@@ -1725,9 +1851,14 @@
 
   function closeScanCheckin(){
     stopScanner();
-    const doneCount = checkinCount, name = checkinRepName;
+    const doneCount = checkinCount, name = checkinRepName, repId = checkinRepId;
     checkinRepId = null; checkinRepName = ''; checkinCount = 0;
     if(doneCount > 0) showToast('اتسجّل رجوع '+doneCount+' طرد من '+name, 'success');
+    // نرجع نجيب ملخص الحساب المحدّث (بعد السكان) ونعرضه تاني عشان تقدر
+    // تدوس "تأكيد القفل" على طول من غير ما تدوّر على المندوب تاني
+    callServer('getRepSettlementSummary', [MY_ID, repId, MY_PIN]).then(function(r){
+      if(r.ok) showSettlementSummary(repId, name, r);
+    }).catch(function(){});
     load();
   }
 
@@ -2101,50 +2232,76 @@
       '<div class="addrep-field"><label>العمولة لكل طلب</label>'+
         '<input id="scanStartComm" type="number" inputmode="numeric" placeholder="0"></div>'+
       '<div class="scan-start-hint">هتتطبق على كل طلب هتسكانه — وتقدر تغيّرها في أي وقت وانت بتسكان</div>'+
+      '<div class="mode-choice">'+
+        '<button type="button" class="mode-btn" onclick="startScanAssign(\''+esc(repId).replace(/'/g,"\\'")+'\',\''+esc(repName).replace(/'/g,"\\'")+'\',\'camera\')">📷<span>كاميرا الموبايل</span></button>'+
+        '<button type="button" class="mode-btn" onclick="startScanAssign(\''+esc(repId).replace(/'/g,"\\'")+'\',\''+esc(repName).replace(/'/g,"\\'")+'\',\'usb\')">🔌<span>سكانر USB خارجي</span></button>'+
+      '</div>'+
       '<div class="modal-actions">'+
         '<button class="cancel" onclick="this.closest(\'.modal-overlay\').remove()">إلغاء</button>'+
-        '<button class="confirm" onclick="startScanAssign(\''+esc(repId).replace(/'/g,"\\'")+'\',\''+esc(repName).replace(/'/g,"\\'")+'\')">ابدأ السكان ▶</button>'+
       '</div>';
     setTimeout(function(){ const i = document.getElementById('scanStartComm'); if(i) i.focus(); }, 60);
   }
 
-  function startScanAssign(repId, repName){
+  /* بنخلّي تختار كاميرا ولا سكانر USB قبل ما نبدأ — عشان لو اخترت USB،
+     الكاميرا متتفتحش خالص. ده الحل النهائي لمشكلة "السكانر بيعطل": كانت
+     الكاميرا فاضلة شغالة في الخلفية حتى وانت بتستخدم السكانر الخارجي،
+     فكانت أحيانًا بتلقط كود من غير قصد في نفس اللحظة اللي السكانر بيقرا
+     فيها، والاتنين بيتعارضوا على نفس السكان. */
+  function startScanAssign(repId, repName, mode){
     const commEl = document.getElementById('scanStartComm');
     const startComm = commEl ? (Number(commEl.value) || 0) : 0;
     document.querySelectorAll('.modal-overlay').forEach(function(o){ o.remove(); });
-    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    if(mode === 'camera' && (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)){
       showToast('الكاميرا مش متاحة في المتصفح ده', 'error'); return;
     }
     scanAssignRepId = repId; scanAssignRepName = repName; scanAssignCount = 0;
     scanAssignLastCode = ''; scanAssignLastTime = 0;
     scanAssignCommission = startComm; scanAssignBreakdown = {};
 
-    const overlay = document.createElement('div');
-    overlay.className = 'scan-overlay';
-    overlay.innerHTML =
+    const topbar =
       '<div class="scan-topbar">'+
         '<div class="scan-topbar-rep">🛵 '+esc(repName)+'</div>'+
         '<div class="scan-topbar-comm"><label>العمولة</label>'+
           '<input id="scanLiveComm" type="number" inputmode="numeric" value="'+esc(startComm||'')+'" placeholder="0" oninput="updateScanCommission()"></div>'+
-      '</div>'+
-      '<div class="scan-video-wrap"><div id="qrReader"></div>'+
-        '<button class="scan-close" onclick="closeScanAssign()">✕</button>'+
-      '</div>'+
-      '<div class="scan-hint" id="scanAssignHint">وجّه الكاميرا على كود الطلب — اتسند 0</div>'+
-      '<div class="scan-manual">'+
-        '<input id="scanManualInput" placeholder="أو اكتب الكود يدويًا" inputmode="numeric">'+
-        '<button type="button" onclick="submitManualAssign()">تأكيد</button>'+
       '</div>';
-    document.body.appendChild(overlay);
 
-    startScanner(function(code){
-      const now = Date.now();
-      // منع تسجيل نفس الكود أكتر من مرة وهو لسه في نطاق الكاميرا
-      if(code !== scanAssignLastCode || now - scanAssignLastTime > 2000){
-        scanAssignLastCode = code; scanAssignLastTime = now;
-        handleScanAssignHit(code);
-      }
-    });
+    const overlay = document.createElement('div');
+    overlay.className = 'scan-overlay';
+    if(mode === 'camera'){
+      overlay.innerHTML = topbar+
+        '<div class="scan-video-wrap"><div id="qrReader"></div>'+
+          '<button class="scan-close" onclick="closeScanAssign()">✕</button>'+
+        '</div>'+
+        '<div class="scan-hint" id="scanAssignHint">وجّه الكاميرا على كود الطلب — اتسند 0</div>'+
+        '<div class="scan-manual">'+
+          '<input id="scanManualInput" placeholder="أو اكتب الكود يدويًا" inputmode="numeric">'+
+          '<button type="button" onclick="submitManualAssign()">تأكيد</button>'+
+        '</div>';
+      document.body.appendChild(overlay);
+      startScanner(function(code){
+        const now = Date.now();
+        // منع تسجيل نفس الكود أكتر من مرة وهو لسه في نطاق الكاميرا
+        if(code !== scanAssignLastCode || now - scanAssignLastTime > 2000){
+          scanAssignLastCode = code; scanAssignLastTime = now;
+          handleScanAssignHit(code);
+        }
+      });
+    } else {
+      overlay.innerHTML = topbar+
+        '<div class="scan-usb-wrap">'+
+          '<div class="scan-usb-icon">🔌</div>'+
+          '<div class="scan-usb-text">وجّه السكانر الخارجي على كود الطلب وسكان<br>الكاميرا مقفولة عشان منعارضش السكانر</div>'+
+        '</div>'+
+        '<div class="scan-hint" id="scanAssignHint">جاهز — اتسند 0</div>'+
+        '<div class="scan-manual">'+
+          '<input id="scanManualInput" placeholder="أو اكتب الكود يدويًا" inputmode="numeric">'+
+          '<button type="button" onclick="submitManualAssign()">تأكيد</button>'+
+        '</div>'+
+        '<button class="scan-close-usb" onclick="closeScanAssign()">✕ إنهاء</button>';
+      document.body.appendChild(overlay);
+      // من غير startScanner() خالص — الكاميرا متتفتحش، والسكانر الخارجي
+      // بيتلقط من الـkeydown listener العام (handleUsbScan)
+    }
   }
 
   function updateScanCommission(){
@@ -2231,6 +2388,11 @@
     code = String(code || '').trim();
     if(!code) return;
 
+    // شاشة "تقفيل بالإسكانر" مفتوحة؟ نتعامل معاه كتسجيل رجوع للمخزن
+    if(checkinRepId){
+      handleCheckinHit(code);
+      return;
+    }
     // شاشة الإسناد بالسكان مفتوحة؟ نتعامل معاه كإسناد لنفس المندوب
     if(scanAssignRepId){
       const now = Date.now();
