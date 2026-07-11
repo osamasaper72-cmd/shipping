@@ -2020,8 +2020,8 @@
       lastTime = now;
 
       if(e.key === 'Enter'){
-        // بنعتبره سكان بس لو اتجمّع طول كافي بسرعة (كود الطلب مش قصير)
-        if(buf.length >= 5){
+        // بنعتبره سكان بس لو اتجمّع طول كافي بسرعة (كود الطلب بقى 4 خانات: # + 3 أرقام)
+        if(buf.length >= 3){
           handleUsbScan(buf);
           e.preventDefault();
         }
