@@ -742,6 +742,8 @@
       const asgBtn = bar.querySelector('[data-tab="assigned"]');
       if(asgBtn) asgBtn.textContent = 'قيد التوصيل'+(assignedCount ? ' ('+assignedCount+')':'');
     }
+
+    refreshMgrActionsBar();
   }
 
   /* بنسجّل آخر لحظة المستخدم لمس فيها أي حاجة في الشاشة (كتابة، دوس، لمس).
@@ -754,6 +756,87 @@
     document.addEventListener(evt, function(){ lastInteractionAt = Date.now(); }, true);
   });
 
+  /* اللوجيك المشترك لتحديث البيانات على الشاشة من غير ما نلمس الهيدر/التابات/
+     الأزرار خالص — بيتستخدم من الريفرش الصامت (silentRefresh) ومن load()
+     بعد أي إجراء (إسناد، تحديث حالة، توليد كود...). لما force=true بنحدّث
+     القايمة الحالية دايمًا (المستخدم عمل إجراء وعايز يشوف نتيجته على طول)،
+     وبنتجاوز فحص "آمن نحدّث ولا لأ" لأن الإجراء ده هو بتاعه هو نفسه. */
+  function applyDataUpdate(r, opts){
+    opts = opts || {};
+    if(ROLE === 'rep'){
+      const newRows = (r.pending||[]).map(function(x){ return x.row; });
+      const added = newRows.filter(function(rw){ return lastPendingRows.indexOf(rw) === -1; });
+      if(lastPendingRows.length && added.length){
+        showToast('🚚 عندك '+added.length+' شحنة جديدة', 'success');
+        if(navigator.vibrate){ try{ navigator.vibrate(60); }catch(e){} }
+      }
+    }
+
+    REPS = r.reps || []; PENDING = r.pending || []; DONE = r.done || []; BALANCES = r.balances || [];
+    lastPendingRows = (r.pending||[]).map(function(x){ return x.row; });
+    patchHeaderNumbers(r);
+
+    // إشعار للأدمن/مسؤول التوزيع أول ما مندوب يسلّم طلب (بيشتغل والتطبيق مفتوح).
+    if(ROLE === 'admin' || ROLE === 'dispatcher'){
+      const nowDelivered = collectDelivered(DONE);
+      if(deliveredSeen){
+        Object.keys(nowDelivered).forEach(function(row){
+          if(!deliveredSeen[row]){
+            const d = nowDelivered[row];
+            const verb = d.status === 'تسليم جزئي' ? 'سلّم جزئيًا' : 'سلّم';
+            showToast('🎉 '+(d.rep || 'مندوب')+' '+verb+' طلب '+(d.customer || ''), 'success');
+            if(navigator.vibrate){ try{ navigator.vibrate(80); }catch(e){} }
+          }
+        });
+      }
+      deliveredSeen = nowDelivered;
+    }
+
+    const newPendingSig = sigOf(r.pending);
+    const newDoneSig = sigOf(r.done);
+    const pendingChanged = newPendingSig !== SIG.pending;
+    const doneChanged = newDoneSig !== SIG.done;
+    SIG.pending = newPendingSig; SIG.done = newDoneSig;
+
+    // لو البيانات اللي بتظهر في التاب الحالي متغيّرتش خالص عن آخر مرة،
+    // منلمسش الـDOM أصلًا — إلا لو force (المستخدم عمل إجراء دلوقتي وعايز
+    // يشوف النتيجة على طول، حتى لو مفيش فرق واضح في التوقيع).
+    const relevantChanged = opts.force ? true : (
+      (MAIN_TAB === 'pending' || MAIN_TAB === 'assigned') ? pendingChanged :
+      (MAIN_TAB === 'reps') ? (pendingChanged || doneChanged) :
+      (ROLE !== 'admin' && ROLE !== 'dispatcher') ? doneChanged :
+      (SUB_TAB === 'collect') ? (pendingChanged || doneChanged) : doneChanged
+    );
+    if(!relevantChanged) return;
+
+    // فيه إجراء شغّال (مودال مفتوح أو نداء لسه ما رجعش)؟ منأجّلش تحديث
+    // القايمة الدورة دي عشان منقطعوش عليه؛ الأرقام فوق اتحدّثت خلاص.
+    // (force بيتخطى الفحص ده لأن ده استكمال لإجراء المستخدم نفسه).
+    if(!opts.force && !isSafeToRerenderList()) return;
+
+    const scrollY = window.scrollY;
+    const repState = MAIN_TAB === 'reps' ? captureRepDetailsState() : null;
+
+    if(MAIN_TAB === 'pending') filterPending();
+    else if(MAIN_TAB === 'assigned') filterAssigned();
+    else if(MAIN_TAB === 'reps'){
+      renderRepsTab(document.getElementById('repsList'));
+      if(repState) restoreRepDetailsState(repState);
+    } else if(ROLE !== 'admin' && ROLE !== 'dispatcher'){
+      const list = document.getElementById('doneList');
+      if(list){
+        list.innerHTML = DONE.length ? DONE.map(function(x,i){ return card(x, ROLE, false, i); }).join('') :
+          '<div class="center"><div class="empty-ill">✅</div><b>لسه مفيش حاجة منفّذة</b>هتظهر هنا أول ما تحدّد حالة أي شحنة.</div>';
+      }
+    } else if(SUB_TAB === 'collect'){
+      const sb = document.getElementById('subBody'); if(sb) renderBalances(sb);
+    } else {
+      filterDone();
+    }
+
+    requestAnimationFrame(function(){ window.scrollTo(0, scrollY); });
+  }
+
   function silentRefresh(){
     if(!MY_ID || document.hidden) return;
     if(Date.now() - lastInteractionAt < 12000) return; // لسه في تفاعل قريب، نأجّل الدورة دي بالكامل
@@ -764,78 +847,7 @@
 
     callServer('getMyData', [MY_ID, MY_PIN]).then(function(r){
       if(!r.ok) return;
-      if(ROLE === 'rep'){
-        const newRows = (r.pending||[]).map(function(x){ return x.row; });
-        const added = newRows.filter(function(rw){ return lastPendingRows.indexOf(rw) === -1; });
-        if(lastPendingRows.length && added.length){
-          showToast('🚚 عندك '+added.length+' شحنة جديدة', 'success');
-          if(navigator.vibrate){ try{ navigator.vibrate(60); }catch(e){} }
-        }
-      }
-
-      REPS = r.reps || []; PENDING = r.pending || []; DONE = r.done || []; BALANCES = r.balances || [];
-      lastPendingRows = (r.pending||[]).map(function(x){ return x.row; });
-      patchHeaderNumbers(r);
-
-      // إشعار للأدمن/مسؤول التوزيع أول ما مندوب يسلّم طلب (بيشتغل والتطبيق مفتوح).
-      // بنحسبه هنا قبل أي early-return عشان الإشعار يوصل حتى لو القايمة
-      // متغيّرتش على الشاشة.
-      if(ROLE === 'admin' || ROLE === 'dispatcher'){
-        const nowDelivered = collectDelivered(DONE);
-        if(deliveredSeen){
-          Object.keys(nowDelivered).forEach(function(row){
-            if(!deliveredSeen[row]){
-              const d = nowDelivered[row];
-              const verb = d.status === 'تسليم جزئي' ? 'سلّم جزئيًا' : 'سلّم';
-              showToast('🎉 '+(d.rep || 'مندوب')+' '+verb+' طلب '+(d.customer || ''), 'success');
-              if(navigator.vibrate){ try{ navigator.vibrate(80); }catch(e){} }
-            }
-          });
-        }
-        deliveredSeen = nowDelivered;
-      }
-
-      const newPendingSig = sigOf(r.pending);
-      const newDoneSig = sigOf(r.done);
-      const pendingChanged = newPendingSig !== SIG.pending;
-      const doneChanged = newDoneSig !== SIG.done;
-      SIG.pending = newPendingSig; SIG.done = newDoneSig;
-
-      // لو البيانات اللي بتظهر في التاب الحالي متغيّرتش خالص عن آخر مرة،
-      // منلمسش الـDOM أصلًا — ده اللي بيلغي "التقطيع" في الحالة الطبيعية
-      // (أغلب دورات الـ15 ثانية مفيهاش أي تغيير جديد).
-      const relevantChanged =
-        (MAIN_TAB === 'pending' || MAIN_TAB === 'assigned') ? pendingChanged :
-        (MAIN_TAB === 'reps') ? (pendingChanged || doneChanged) :
-        (ROLE !== 'admin' && ROLE !== 'dispatcher') ? doneChanged :
-        (SUB_TAB === 'collect') ? (pendingChanged || doneChanged) : doneChanged;
-      if(!relevantChanged) return;
-
-      // فيه إجراء شغّال (مودال مفتوح أو نداء لسه ما رجعش)؟ منأجّلش تحديث
-      // القايمة الدورة دي عشان منقطعوش عليه؛ الأرقام فوق اتحدّثت خلاص.
-      if(!isSafeToRerenderList()) return;
-
-      const scrollY = window.scrollY;
-      const repState = MAIN_TAB === 'reps' ? captureRepDetailsState() : null;
-
-      if(MAIN_TAB === 'pending') filterPending();
-      else if(MAIN_TAB === 'assigned') filterAssigned();
-      else if(MAIN_TAB === 'reps'){
-        renderRepsTab(document.getElementById('repsList'));
-        if(repState) restoreRepDetailsState(repState);
-      } else if(ROLE !== 'admin' && ROLE !== 'dispatcher'){
-        const list = document.getElementById('doneList');
-        if(list){
-          list.innerHTML = DONE.length ? DONE.map(function(x,i){ return card(x, ROLE, false, i); }).join('') :
-            '<div class="center"><div class="empty-ill">✅</div><b>لسه مفيش حاجة منفّذة</b>هتظهر هنا أول ما تحدّد حالة أي شحنة.</div>';
-        }
-      } else if(SUB_TAB === 'collect'){
-        const sb = document.getElementById('subBody'); if(sb) renderBalances(sb);
-      } else {
-        filterDone();
-      }
-
-      requestAnimationFrame(function(){ window.scrollTo(0, scrollY); });
+      applyDataUpdate(r, {});
     }).catch(function(){ /* أخطاء الريفرش الصامت متتجاهلش عشان متزعجش المستخدم */ });
   }
 
@@ -874,6 +886,7 @@
           try{ localStorage.setItem(STORAGE_KEY, val); localStorage.setItem(STORAGE_KEY_PIN, pin); }catch(e){}
           MY_ID = val; MY_PIN = pin;
           render(r);
+          APP_BOOTED = true;
           lastPendingRows = (r.pending||[]).map(function(x){ return x.row; });
           SIG.pending = sigOf(r.pending); SIG.done = sigOf(r.done);
           deliveredSeen = (r.role==='admin'||r.role==='dispatcher') ? collectDelivered(r.done) : null;
@@ -886,18 +899,29 @@
   function switchAccount(){
     try{ localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(STORAGE_KEY_PIN); }catch(e){}
     MY_ID = ''; MY_PIN = '';
+    APP_BOOTED = false;
     stopPolling();
     showLogin();
   }
+
+  let APP_BOOTED = false;
 
   function load(){
     callServer('getMyData', [MY_ID, MY_PIN])
       .then(function(r){
         if(r.ok){
-          render(r);
-          lastPendingRows = (r.pending||[]).map(function(x){ return x.row; });
-          SIG.pending = sigOf(r.pending); SIG.done = sigOf(r.done);
-          if(deliveredSeen === null && (r.role==='admin'||r.role==='dispatcher')) deliveredSeen = collectDelivered(r.done);
+          if(!APP_BOOTED){
+            // أول تحميل بس بيعمل رندر كامل (هيدر + تابات + كل حاجة أول مرة)
+            render(r);
+            APP_BOOTED = true;
+            lastPendingRows = (r.pending||[]).map(function(x){ return x.row; });
+            SIG.pending = sigOf(r.pending); SIG.done = sigOf(r.done);
+            if(deliveredSeen === null && (r.role==='admin'||r.role==='dispatcher')) deliveredSeen = collectDelivered(r.done);
+          } else {
+            // بعد كده: تحديث خفيف بس — من غير ما نلمس الهيدر/التابات/الأزرار
+            // (عشان ميختفوش)، ومن غير ما نعمل فلاش على كارتات ما اتغيّرتش
+            applyDataUpdate(r, {force: true});
+          }
           startPolling();
         }
         else { try{localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(STORAGE_KEY_PIN);}catch(e){} stopPolling(); showLogin(r.error); }
@@ -1021,30 +1045,46 @@
       (isMgr ? '<button class="tab '+(MAIN_TAB==='reps'?'active':'')+'" data-tab="reps" onclick="switchMain(\'reps\')">المناديب</button>' : '')+
       '</div>';
 
-    if(isMgr && MAIN_TAB==='pending'){
-      html += '<button class="gen importbtn" onclick="openImportExcel()">＋ استيراد إكسل شركة</button>';
-    }
-    if(isMgr && MAIN_TAB==='pending' && s.noCode>0){
-      html += '<button class="gen" onclick="genCodes(this)">'+
-        'توليد أكواد لكل الشحنات الجديدة<span class="badge">'+s.noCode+' من غير كود</span></button>';
-    }
-    if(isMgr && MAIN_TAB==='pending'){
-      const withCode = PENDING.filter(function(x){ return x.code; });
-      const unprinted = withCode.filter(function(x){ return !x.printed; }).length;
-      if(withCode.length){
-        html += '<button class="gen printbtn" onclick="openPrintLabels()">'+
-          '🖨️ طباعة اللابلات'+(unprinted?'<span class="badge">'+unprinted+' لسه ما اتطبعوش</span>':'')+'</button>';
-      }
-      if(REPS.length){
-        html += '<button class="gen scanassignbtn" onclick="openScanAssign()">'+SCAN_ICON+' إسناد سريع بالسكان</button>';
-      }
-    }
+    html += '<div id="mgrActionsBar">'+mgrActionsHtml()+'</div>';
 
     html += '<div id="mainBody"></div>'+
       '<a class="switch-link" onclick="switchAccount()">تسجيل خروج / تغيير الحساب</a>';
 
     app.innerHTML = html;
     renderMainBody();
+  }
+
+  /* بار الأزرار (استيراد/توليد أكواد/طباعة/إسناد بالسكان) — بقى في حاوية
+     منفصلة بـid ثابت عشان يفضل ظاهر دايمًا مهما حصل (إسناد، تحديث، تبديل
+     تاب...) من غير ما يختفي، وكمان عشان نقدر نحدّث الأرقام/الظهور بتاعه
+     لوحده من غير ما نلمس باقي الصفحة. */
+  function mgrActionsHtml(){
+    const isMgr = (ROLE==='admin' || ROLE==='dispatcher');
+    if(!isMgr) return '';
+    let h = '';
+    h += '<button class="gen importbtn" onclick="openImportExcel()">＋ استيراد إكسل شركة</button>';
+
+    const noCode = PENDING.filter(function(x){ return !x.code; }).length;
+    if(MAIN_TAB==='pending' && noCode>0){
+      h += '<button class="gen" onclick="genCodes(this)">'+
+        'توليد أكواد لكل الشحنات الجديدة<span class="badge">'+noCode+' من غير كود</span></button>';
+    }
+
+    const withCode = PENDING.filter(function(x){ return x.code; });
+    const unprinted = withCode.filter(function(x){ return !x.printed; }).length;
+    if(withCode.length){
+      h += '<button class="gen printbtn" onclick="openPrintLabels()">'+
+        '🖨️ طباعة اللابلات'+(unprinted?'<span class="badge">'+unprinted+' لسه ما اتطبعوش</span>':'')+'</button>';
+    }
+    if(REPS.length){
+      h += '<button class="gen scanassignbtn" onclick="openScanAssign()">'+SCAN_ICON+' إسناد سريع بالسكان</button>';
+    }
+    return h;
+  }
+
+  function refreshMgrActionsBar(){
+    const bar = document.getElementById('mgrActionsBar');
+    if(bar) bar.innerHTML = mgrActionsHtml();
   }
 
   function stat(n, label, id){
@@ -1082,6 +1122,7 @@
         btn.classList.toggle('active', btn.dataset.tab === tab);
       });
     }
+    refreshMgrActionsBar();
     renderMainBody(dir);
   }
 
