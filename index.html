@@ -67,6 +67,9 @@
   .money3 div span{display:block; font-size:11px; color:var(--mut); margin-bottom:4px}
   .money3 div b{font-size:16px; font-weight:800}
   .money3 .c1 b{color:var(--go)} .money3 .c2 b{color:var(--wait)} .money3 .c3 b{color:#5bc8ff}
+  .counter-row{display:flex; gap:8px}
+  .counter-row .daily-btn{flex:1}
+  .profit-btn{border-color:var(--go)!important; color:var(--go)!important}
   .daily-btn{display:block; width:100%; padding:9px; margin-bottom:12px; border-radius:10px;
     border:1px solid var(--line); background:transparent; color:var(--mut);
     font-family:inherit; font-size:12px; font-weight:700}
@@ -455,9 +458,45 @@
     padding:12px; margin-bottom:14px; font-size:13px; color:var(--mut)}
   .settle-money b{display:block; color:var(--ink); font-size:15px; font-weight:800; margin-top:2px}
   .daily-since{text-align:center; font-size:11px; color:var(--mut); margin-bottom:14px}
+  .profit-big{text-align:center; font-size:38px; font-weight:800; color:var(--go); margin:8px 0}
+  .profit-big span{font-size:18px; color:var(--mut)}
+  .profit-detail{margin-bottom:8px}
+  .profit-sub{text-align:center; font-size:12px; color:var(--mut); margin-bottom:10px}
+  .profit-office{display:flex; justify-content:space-between; padding:8px 12px; border-radius:9px;
+    background:var(--bg); margin-bottom:6px; font-size:13px}
+  .profit-office b{color:var(--go)}
+  .profit-warn{font-size:11px; color:var(--wait); text-align:center; margin-top:8px; line-height:1.6}
   .scan-checkin-btn{display:flex; align-items:center; justify-content:center; gap:6px; width:100%;
     padding:12px; margin-bottom:14px; border-radius:12px; border:0; background:var(--partial);
     color:#06182a; font-family:inherit; font-size:13px; font-weight:800}
+
+  /* قسم الطرود المرتجعة في شاشة تقفيل الحساب */
+  .settle-returns{margin-bottom:14px}
+  .settle-returns-title{font-size:12px; color:var(--mut); font-weight:700; margin-bottom:8px; text-align:right;
+    display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap}
+  .need-badge{background:var(--partial); color:#06182a; border-radius:20px; padding:2px 10px; font-size:11px; font-weight:800}
+  .settle-returns-list{max-height:28vh; overflow-y:auto; margin-bottom:8px}
+  .settle-return-row{display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:10px;
+    background:var(--bg); margin-bottom:6px; font-size:13px}
+  .srr-name{flex:1; color:var(--ink); font-weight:600; text-align:right}
+  .srr-code{color:var(--mut); font-size:12px}
+  .settle-scanned-list{margin-bottom:8px}
+  .settle-scanned-row{display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:10px;
+    background:rgba(46,204,113,.08); border:1px solid rgba(46,204,113,.25); margin-bottom:6px; font-size:12px}
+  .ssr-check{color:var(--go); font-weight:800}
+  .ssr-dest{color:var(--mut); font-size:11px}
+  .settle-allin{text-align:center; color:var(--go); font-weight:800; font-size:13px; padding:12px}
+  .close-scan-bar{margin-bottom:14px}
+  .close-scan-status{text-align:center; font-size:14px; font-weight:800; color:var(--ink);
+    padding:10px; background:var(--bg); border-radius:10px; margin-bottom:8px; min-height:20px}
+  .close-scan-manual{display:flex; gap:8px; margin-bottom:8px}
+  .close-scan-manual input{flex:1; height:44px; border-radius:10px; border:1px solid var(--line);
+    background:var(--bg); color:var(--ink); padding:0 12px; font-family:inherit; font-size:14px; text-align:right}
+  .close-scan-manual button{flex-shrink:0; padding:0 18px; border-radius:10px; border:0;
+    background:var(--go); color:#06210f; font-family:inherit; font-weight:800; font-size:14px}
+  .close-scan-cam{display:block; text-align:center; color:#5bc8ff; font-size:12px; padding:6px}
+  .scan-err-flash{animation:errFlash .3s}
+  @keyframes errFlash{0%,100%{box-shadow:none} 50%{box-shadow:0 0 0 3px var(--no) inset}}
   .printsel-box p{text-align:center}
   .printsel-list{max-height:50vh; overflow-y:auto; margin-bottom:14px; text-align:right}
   .printsel-box .search{margin-bottom:8px}
@@ -519,7 +558,12 @@
      (اللي بينتهي بـ /exec). خده من:
      Deploy > Manage deployments > انسخ رابط الـ Web app
   ============================================================ */
-  const API_URL = 'https://script.google.com/macros/s/AKfycbxhXE0bzdqCxuIep9BEt7kMtYxYp7p7Ehs0Fn70it9jpHy_93krqQnZFHMhigp-4mkh/exec';
+  const API_URL = 'https://beheira.osamasaper72.workers.dev/';
+
+  /* التوكن السري بقى مخبّي جوه الـ Cloudflare Worker (البروكسي)، مبقاش
+     مكتوب هنا خالص. الـ Worker بيضيفه لكل نداء قبل ما يبعته لـ Apps Script.
+     سيبناه فاضي، فأي نداء مباشر (مش من الـWorker) هيترفض من السيرفر. */
+  const API_TOKEN = '';
 
   /* لما تقرر اسم الشركة النهائي، غيّره من هنا بس — بيتستخدم في رسائل الواتساب/SMS وعلى اللابل */
   const COMPANY_NAME = 'BEHEIRA EXPRESS';
@@ -569,6 +613,7 @@
     attempt = attempt || 1;
     const url = API_URL + '?fn=' + encodeURIComponent(fn) +
       '&args=' + encodeURIComponent(JSON.stringify(args || [])) +
+      '&token=' + encodeURIComponent(API_TOKEN) +
       '&_cb=' + Date.now() + Math.random().toString(36).slice(2);
 
     const controller = new AbortController();
@@ -604,7 +649,7 @@
     return fetch(API_URL, {
       method: 'POST', redirect: 'follow', cache: 'no-store', signal: controller.signal,
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ fn: fn, args: args || [] })
+      body: JSON.stringify({ fn: fn, args: args || [], token: API_TOKEN })
     })
       .then(function(res){
         clearTimeout(timeoutId);
@@ -1089,7 +1134,12 @@
       '</div>';
 
     if(isMgr){
+      html += '<div class="counter-row">';
       html += '<button class="daily-btn" onclick="openDailyCounter()">📅 تحصيل اليوم</button>';
+      if(d.role === 'admin'){
+        html += '<button class="daily-btn profit-btn" onclick="openProfitCounter()">💵 مكسبنا</button>';
+      }
+      html += '</div>';
     }
 
     const tab1Label = 'قيد التنفيذ';
@@ -1621,7 +1671,7 @@
     overlay.className = 'modal-overlay';
     overlay.innerHTML =
       '<div class="modal-box">'+
-        '<p>تحصيل اليوم</p>'+
+        '<p>تحصيل اليوم (من الحسابات المقفولة)</p>'+
         '<div class="settle-money" id="dailyCounterBody"><span>جارِ التحميل…</span></div>'+
         '<div class="daily-since" id="dailySinceText"></div>'+
         '<div class="modal-actions">'+
@@ -1676,6 +1726,73 @@
     });
   }
 
+  /* ===== عداد مكسبنا (أدمن فقط) =====
+     المكسب = عمولة المكتب − عمولة المندوب، على الأوردرات المقفولة من وقت
+     آخر تصفير. بيتحسب على السيرفر ومتخزن مركزيًا. */
+  function openProfitCounter(){
+    document.querySelectorAll('.modal-overlay').forEach(function(o){ o.remove(); });
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML =
+      '<div class="modal-box">'+
+        '<p>مكسبنا (من الحسابات المقفولة)</p>'+
+        '<div class="profit-big" id="profitBig">جارِ التحميل…</div>'+
+        '<div class="profit-detail" id="profitDetail"></div>'+
+        '<div class="daily-since" id="profitSinceText"></div>'+
+        '<div class="modal-actions">'+
+          '<button class="cancel" onclick="resetProfitCounter(this)">↺ تصفير المكسب</button>'+
+          '<button class="confirm" onclick="this.closest(\'.modal-overlay\').remove()">تمام</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(overlay);
+    loadProfitCounter();
+  }
+
+  function loadProfitCounter(){
+    callServer('getProfitCounter', [MY_ID, MY_PIN]).then(function(r){
+      const big = document.getElementById('profitBig');
+      const detail = document.getElementById('profitDetail');
+      const sinceEl = document.getElementById('profitSinceText');
+      if(!r.ok){ if(big) big.textContent = r.error || 'حصل خطأ'; return; }
+      if(big) big.innerHTML = r.profit+' <span>ج</span>';
+      if(detail){
+        const offices = Object.keys(r.byOffice || {});
+        let h = '<div class="profit-sub">'+r.counted+' أوردر داخل الحساب</div>';
+        if(offices.length){
+          h += offices.map(function(o){
+            return '<div class="profit-office"><span>'+esc(o)+'</span><b>'+r.byOffice[o]+' ج</b></div>';
+          }).join('');
+        }
+        if(r.unknownOffice > 0){
+          h += '<div class="profit-warn">⚠️ '+r.unknownOffice+' أوردر مصدرهم مكتب مش معرّف عمولته — مش متحسبين. ضيف المكتب في الكود.</div>';
+        }
+        detail.innerHTML = h;
+      }
+      if(sinceEl){
+        const d = new Date(r.since);
+        sinceEl.textContent = 'بيتحسب من: '+d.toLocaleString('ar-EG', { hour:'2-digit', minute:'2-digit', day:'numeric', month:'numeric' });
+      }
+    }).catch(function(){
+      const big = document.getElementById('profitBig');
+      if(big) big.textContent = 'مفيش نت، جرّب تاني';
+    });
+  }
+
+  function resetProfitCounter(btn){
+    showConfirm('تصفير عداد المكسب؟ هيبدأ يعدّ من دلوقتي على كل الأجهزة.').then(function(ok){
+      if(!ok) return;
+      btn.disabled = true;
+      callServer('resetProfitCounter', [MY_ID, MY_PIN]).then(function(r){
+        btn.disabled = false;
+        if(r.ok){ showToast('اتصفّر المكسب ✅', 'success'); loadProfitCounter(); }
+        else { showToast(r.error || 'حصل خطأ', 'error'); }
+      }).catch(function(){
+        btn.disabled = false;
+        showToast('مفيش نت، جرّب تاني', 'error');
+      });
+    });
+  }
+
   function renderBalances(container){
     if(!BALANCES.length){
       container.innerHTML = '<div class="center"><div class="empty-ill">👌</div><b>كله مقفول</b>مفيش حد عليه فلوس لسه.</div>';
@@ -1704,12 +1821,50 @@
     });
   }
 
+  /* ملخص حساب المندوب: بيوري إحصائيات + قايمة الطرود الراجعة اللي محتاجة
+     سكان (عشان الشخص يتأكد إنها هي نفس اللي مع المندوب) + الفلوس. الطرود
+     اللي لسه محتاجة سكان بتبان في قايمة فوق، واللي اتسكن بينزل تحت في
+     قايمة "اترجّع" مع بيان راح لأي تبويب. */
+  let settleRepId = null, settleRepName = '', settleScanActive = false;
+
   function showSettlementSummary(repId, repName, sum){
     document.querySelectorAll('.modal-overlay').forEach(function(o){ o.remove(); });
+    settleRepId = repId; settleRepName = repName; settleScanActive = false;
+
     const rows = Object.keys(sum.byStatus).map(function(st){
       const meta = STATUS_META[st] || {label: st};
       return '<div class="settle-row"><span>'+meta.label+'</span><b>'+sum.byStatus[st]+'</b></div>';
     }).join('');
+
+    const returns = sum.returns || [];
+    const needScan = returns.filter(function(x){ return !x.checkedIn; });
+    const alreadyIn = returns.filter(function(x){ return x.checkedIn; });
+
+    let returnsSection = '';
+    if(returns.length){
+      returnsSection =
+        '<div class="settle-returns">'+
+          '<div class="settle-returns-title">الطرود المرتجعة مع المندوب — اتأكد إنها هي دي <span class="need-badge" id="needBadge">'+needScan.length+' محتاج سكان</span></div>'+
+          '<div class="settle-returns-list" id="settleNeedList">'+
+            (needScan.length ? needScan.map(returnRowHtml).join('') :
+              '<div class="settle-allin">كل الطرود اترجّعت ✅</div>')+
+          '</div>'+
+          '<div class="settle-scanned-list" id="settleScannedList">'+
+            alreadyIn.map(function(x){ return scannedRowHtml(x, destOf_(x.status)); }).join('')+
+          '</div>'+
+          (needScan.length ?
+            '<button type="button" class="scan-checkin-btn" id="startCloseScanBtn" onclick="startCloseScan()">'+SCAN_ICON+' سكان للقفل</button>'+
+            '<div class="close-scan-bar" id="closeScanBar" hidden>'+
+              '<div class="close-scan-status" id="closeScanStatus">جاهز — سكان الطرود</div>'+
+              '<div class="close-scan-manual">'+
+                '<input id="closeScanInput" placeholder="سكان أو اكتب الكود" inputmode="numeric" autocomplete="off">'+
+                '<button type="button" onclick="submitCloseScanManual()">تأكيد</button>'+
+              '</div>'+
+              '<a class="close-scan-cam" onclick="startScanCheckin(\''+esc(repId).replace(/'/g,"\\'")+'\',\''+esc(repName).replace(/'/g,"\\'")+'\',\'camera\')">📷 استخدم كاميرا الموبايل بدل السكانر</a>'+
+            '</div>'
+          : '')+
+        '</div>';
+    }
 
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
@@ -1719,19 +1874,17 @@
         '<div class="settle-summary-top">'+
           '<div class="settle-stat"><b>'+sum.total+'</b><span>إجمالي الطلبات</span></div>'+
           '<div class="settle-stat go"><b>'+sum.delivered+'</b><span>اتسلّمت</span></div>'+
-          '<div class="settle-stat wait"><b>'+sum.remaining+'</b><span>لسه راجعة</span></div>'+
+          '<div class="settle-stat wait"><b id="settleRemainStat">'+needScan.length+'</b><span>محتاج رجوع</span></div>'+
         '</div>'+
         (rows ? '<div class="settle-breakdown">'+rows+'</div>' : '')+
+        returnsSection+
         '<div class="settle-money">'+
           '<span>تحصيل <b>'+sum.collected+' ج</b></span>'+
           '<span>عمولة <b>'+sum.commission+' ج</b></span>'+
           '<span>صافي <b>'+sum.net+' ج</b></span>'+
         '</div>'+
-        (sum.remaining > 0 ? '<button type="button" class="scan-checkin-btn" onclick="openScanCheckin(\''+
-          esc(repId).replace(/'/g,"\\'")+'\',\''+esc(repName).replace(/'/g,"\\'")+'\')">'+SCAN_ICON+
-          ' تقفيل بالإسكانر ('+sum.remaining+' لسه محتاجين رجوع)</button>' : '')+
         '<div class="modal-actions">'+
-          '<button class="cancel" onclick="this.closest(\'.modal-overlay\').remove()">إلغاء</button>'+
+          '<button class="cancel" onclick="closeSettlement()">إلغاء</button>'+
           '<button class="confirm" onclick="confirmCloseAccount(this,\''+esc(repId).replace(/'/g,"\\'")+
             '\',\''+esc(repName).replace(/'/g,"\\'")+'\')">✓ تأكيد القفل</button>'+
         '</div>'+
@@ -1739,56 +1892,108 @@
     document.body.appendChild(overlay);
   }
 
+  function returnRowHtml(x){
+    const meta = STATUS_META[x.status] || {cls:'neutral', label:x.status};
+    return '<div class="settle-return-row" data-code="'+esc(String(x.code))+'">'+
+      '<span class="srr-name">'+esc(x.customer)+'</span>'+
+      '<span class="srr-code mono">'+esc(x.code)+'</span>'+
+      '<span class="pill '+meta.cls+'">'+meta.label+'</span>'+
+    '</div>';
+  }
+
+  function scannedRowHtml(x, dest){
+    return '<div class="settle-scanned-row">'+
+      '<span class="ssr-check">✓</span>'+
+      '<span class="srr-name">'+esc(x.customer)+'</span>'+
+      '<span class="ssr-dest">راح لـ '+dest+'</span>'+
+    '</div>';
+  }
+
+  // بيحدد الطرد راح لأي تبويب حسب حالته
+  function destOf_(status){
+    if(WAREHOUSE_STATUSES.indexOf(status) > -1) return 'موجود في المخزن';
+    if(RETURN_STATUSES.indexOf(status) > -1) return 'مرتجعات';
+    return 'المخزن';
+  }
+
+  function closeSettlement(){
+    settleRepId = null; settleRepName = ''; settleScanActive = false;
+    checkinRepId = null;
+    document.querySelectorAll('.modal-overlay').forEach(function(o){ o.remove(); });
+  }
+
+  /* "سكان للقفل": مبيفتحش كاميرا ولا شاشة سودا — بيفعّل وضع السكانر
+     (زي سكانر الكاشير)، والقايمة الظاهرة بتفضل، وكل ما تسكان طرد بيختفي
+     منها وينزل تحت في قايمة "اترجّع". السكانر الخارجي بيتلقط من الـkeydown
+     العام، وفيه خانة إدخال يدوي كمان. */
+  function startCloseScan(){
+    settleScanActive = true;
+    checkinRepId = settleRepId; checkinRepName = settleRepName; // بيفعّل توجيه السكانر العام
+    const btn = document.getElementById('startCloseScanBtn');
+    if(btn) btn.style.display = 'none';
+    const bar = document.getElementById('closeScanBar');
+    if(bar) bar.hidden = false;
+    const inp = document.getElementById('closeScanInput');
+    if(inp) setTimeout(function(){ inp.focus(); }, 60);
+  }
+
+  function submitCloseScanManual(){
+    const inp = document.getElementById('closeScanInput');
+    const code = inp ? inp.value.trim() : '';
+    if(!code) return;
+    inp.value = '';
+    handleCheckinHit(code);
+    if(inp) inp.focus();
+  }
+
   function confirmCloseAccount(btn, repId, repName){
     showConfirm('تأكيد استلام الكاش من '+repName+'؟\nهيتقفل الحساب ومش هترجع تعدّله.').then(function(ok){
       if(!ok) return;
       const overlay = btn.closest('.modal-overlay');
-      overlay.querySelectorAll('button').forEach(function(b){ b.disabled = true; });
+      overlay.querySelectorAll('button, input').forEach(function(b){ b.disabled = true; });
+      settleScanActive = false; checkinRepId = null;
       callServer('closeRepAccount', [MY_ID, repId, MY_PIN])
         .then(function(r){
           if(r.ok){
-            overlay.remove();
+            closeSettlement();
             showToast('تم ✅ '+r.repName+' — '+r.count+' شحنة — '+r.amount+' ج', 'success');
             load();
           } else {
-            overlay.querySelectorAll('button').forEach(function(b){ b.disabled = false; });
+            overlay.querySelectorAll('button, input').forEach(function(b){ b.disabled = false; });
             showToast(r.error, 'error');
           }
         })
         .catch(function(e){
-          overlay.querySelectorAll('button').forEach(function(b){ b.disabled = false; });
+          overlay.querySelectorAll('button, input').forEach(function(b){ b.disabled = false; });
           showToast('خطأ: '+e.message, 'error');
         });
     });
   }
 
-  /* ===== تقفيل بالإسكانر: سكان الطرود الراجعة (تأجيل/مغلق/لا يرد/مرتجعات)
-     من مندوب معيّن، كل طرد بيتسجّل رجوعه للمخزن فورًا وبيختفي من قائمة
-     "لسه محتاج يرجع" لحد ما يتفضل بس اللي اتسلّم. ===== */
+  /* ===== أصوات النجاح/الخطأ (Web Audio، من غير أي ملفات) ===== */
+  let _audioCtx = null;
+  function beep_(freq, durMs, type){
+    try{
+      if(!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = _audioCtx.createOscillator();
+      const g = _audioCtx.createGain();
+      o.type = type || 'sine'; o.frequency.value = freq;
+      o.connect(g); g.connect(_audioCtx.destination);
+      g.gain.setValueAtTime(0.15, _audioCtx.currentTime);
+      o.start();
+      g.gain.exponentialRampToValueAtTime(0.001, _audioCtx.currentTime + durMs/1000);
+      o.stop(_audioCtx.currentTime + durMs/1000);
+    }catch(e){}
+  }
+  function beepOk_(){ beep_(880, 120, 'sine'); }
+  function beepErr_(){ beep_(200, 300, 'square'); }
+
+  /* ===== تقفيل بالإسكانر (كاميرا الموبايل، وضع منفصل للي على الفون) ===== */
   let checkinRepId = null, checkinRepName = '', checkinCount = 0;
 
-  function openScanCheckin(repId, repName){
-    document.querySelectorAll('.modal-overlay').forEach(function(o){ o.remove(); });
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
-    overlay.innerHTML =
-      '<div class="modal-box">'+
-        '<p>هتسكان بإيه؟</p>'+
-        '<div class="mode-choice">'+
-          '<button type="button" class="mode-btn" onclick="startScanCheckin(\''+esc(repId).replace(/'/g,"\\'")+'\',\''+esc(repName).replace(/'/g,"\\'")+'\',\'camera\')">📷<span>كاميرا الموبايل</span></button>'+
-          '<button type="button" class="mode-btn" onclick="startScanCheckin(\''+esc(repId).replace(/'/g,"\\'")+'\',\''+esc(repName).replace(/'/g,"\\'")+'\',\'usb\')">🔌<span>سكانر USB خارجي</span></button>'+
-        '</div>'+
-        '<div class="modal-actions">'+
-          '<button class="cancel" onclick="this.closest(\'.modal-overlay\').remove()">إلغاء</button>'+
-        '</div>'+
-      '</div>';
-    document.body.appendChild(overlay);
-  }
-
-  /* نفس مبدأ الحل بتاع الإسناد بالسكان: لو USB، الكاميرا متتفتحش خالص
-     عشان مايحصلش تعارض بينها وبين السكانر الخارجي. */
   function startScanCheckin(repId, repName, mode){
     document.querySelectorAll('.modal-overlay').forEach(function(o){ o.remove(); });
+    settleScanActive = false;
     if(mode === 'camera' && (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)){
       showToast('الكاميرا مش متاحة في المتصفح ده', 'error'); return;
     }
@@ -1796,32 +2001,17 @@
 
     const overlay = document.createElement('div');
     overlay.className = 'scan-overlay';
-    if(mode === 'camera'){
-      overlay.innerHTML =
-        '<div class="scan-video-wrap"><div id="qrReader"></div>'+
-          '<button class="scan-close" onclick="closeScanCheckin()">✕</button>'+
-        '</div>'+
-        '<div class="scan-hint" id="checkinHint">سكان الطرود الراجعة من '+esc(repName)+' — 0 اتسجّل</div>'+
-        '<div class="scan-manual">'+
-          '<input id="scanManualInput" placeholder="أو اكتب الكود يدويًا" inputmode="numeric">'+
-          '<button type="button" onclick="submitManualCheckin()">تأكيد</button>'+
-        '</div>';
-      document.body.appendChild(overlay);
-      startScanner(function(code){ handleCheckinHit(code); });
-    } else {
-      overlay.innerHTML =
-        '<div class="scan-usb-wrap">'+
-          '<div class="scan-usb-icon">🔌</div>'+
-          '<div class="scan-usb-text">وجّه السكانر الخارجي على كود الطرد الراجع من '+esc(repName)+' وسكان<br>الكاميرا مقفولة عشان منعارضش السكانر</div>'+
-        '</div>'+
-        '<div class="scan-hint" id="checkinHint">جاهز — 0 اتسجّل</div>'+
-        '<div class="scan-manual">'+
-          '<input id="scanManualInput" placeholder="أو اكتب الكود يدويًا" inputmode="numeric">'+
-          '<button type="button" onclick="submitManualCheckin()">تأكيد</button>'+
-        '</div>'+
-        '<button class="scan-close-usb" onclick="closeScanCheckin()">✕ إنهاء</button>';
-      document.body.appendChild(overlay);
-    }
+    overlay.innerHTML =
+      '<div class="scan-video-wrap"><div id="qrReader"></div>'+
+        '<button class="scan-close" onclick="closeScanCheckin()">✕</button>'+
+      '</div>'+
+      '<div class="scan-hint" id="checkinHint">سكان الطرود الراجعة من '+esc(repName)+' — 0 اتسجّل</div>'+
+      '<div class="scan-manual">'+
+        '<input id="scanManualInput" placeholder="أو اكتب الكود يدويًا" inputmode="numeric">'+
+        '<button type="button" onclick="submitManualCheckin()">تأكيد</button>'+
+      '</div>';
+    document.body.appendChild(overlay);
+    startScanner(function(code){ handleCheckinHit(code); });
   }
 
   function submitManualCheckin(){
@@ -1832,20 +2022,90 @@
     handleCheckinHit(code);
   }
 
+  /* التحقق محليًا (فوري) + كتابة في الخلفية. بيشتغل في الوضعين: الوضع
+     الإنلاين جوه مودال الملخص (settleScanActive)، أو شاشة الكاميرا. */
   function handleCheckinHit(code){
-    const hint = document.getElementById('checkinHint');
-    callServer('checkInReturn', [MY_ID, checkinRepId, code, MY_PIN]).then(function(r){
-      if(r.ok){
-        checkinCount++;
-        if(navigator.vibrate){ try{ navigator.vibrate(40); }catch(e){} }
-        const meta = STATUS_META[r.status] || {label: r.status};
-        if(hint) hint.textContent = '✅ '+r.customer+' — '+meta.label+' — اتسجّل '+checkinCount;
-      } else {
-        if(navigator.vibrate){ try{ navigator.vibrate([30,50,30]); }catch(e){} }
-        if(hint) hint.textContent = '⚠️ '+r.error+' — اتسجّل '+checkinCount;
+    code = String(code || '').trim();
+    if(!code) return;
+    const inlineStatus = document.getElementById('closeScanStatus'); // موجود بس في الوضع الإنلاين
+    const camHint = document.getElementById('checkinHint');          // موجود بس في شاشة الكاميرا
+    function setMsg(msg){ if(inlineStatus) inlineStatus.textContent = msg; if(camHint) camHint.textContent = msg; }
+
+    const all = PENDING.concat(DONE);
+    const item = all.find(function(x){ return String(x.code) === String(code); });
+
+    if(!item || String(item.repId) !== String(checkinRepId) ||
+       item.status === 'تم التسليم' || item.status === 'تسليم جزئي' ||
+       !item.status || item.status === 'جديد'){
+      beepErr_();
+      if(navigator.vibrate){ try{ navigator.vibrate([40,60,40]); }catch(e){} }
+      let why = 'الكود ده مش موجود';
+      if(item && String(item.repId) !== String(checkinRepId)) why = 'الطرد ده مش لنفس المندوب';
+      else if(item && (item.status === 'تم التسليم' || item.status === 'تسليم جزئي')) why = 'الطلب متسلّم، مش مرتجع';
+      else if(item && (!item.status || item.status === 'جديد')) why = 'الطلب لسه من غير حالة';
+      setMsg('⚠️ ' + why);
+      flashScanError_();
+      return;
+    }
+    if(item.checkedIn){
+      setMsg('الطرد ده اتسجّل قبل كده');
+      return;
+    }
+
+    // نجاح
+    item.checkedIn = true;
+    checkinCount++;
+    beepOk_();
+    if(navigator.vibrate){ try{ navigator.vibrate(40); }catch(e){} }
+    const dest = destOf_(item.status);
+    setMsg('✅ '+item.customer+' — راح لـ '+dest);
+
+    if(settleScanActive){
+      moveInlineRowToScanned_(code, item, dest);
+    }
+    persistCheckin_(checkinRepId, code, item, 1);
+  }
+
+  function moveInlineRowToScanned_(code, item, dest){
+    const needList = document.getElementById('settleNeedList');
+    const scannedList = document.getElementById('settleScannedList');
+    if(!needList || !scannedList) return;
+    const row = needList.querySelector('.settle-return-row[data-code="'+String(code).replace(/"/g,'')+'"]');
+    if(row) row.remove();
+
+    const div = document.createElement('div');
+    div.innerHTML = scannedRowHtml(item, dest);
+    if(div.firstChild) scannedList.appendChild(div.firstChild);
+
+    const remaining = needList.querySelectorAll('.settle-return-row').length;
+    const badge = document.getElementById('needBadge');
+    if(badge) badge.textContent = remaining + ' محتاج سكان';
+    const remainStat = document.getElementById('settleRemainStat');
+    if(remainStat) remainStat.textContent = remaining;
+    if(remaining === 0){
+      needList.innerHTML = '<div class="settle-allin">كل الطرود اترجّعت ✅ — تقدر تأكّد القفل</div>';
+      const status = document.getElementById('closeScanStatus');
+      if(status) status.textContent = '✅ خلصت كل الطرود';
+    }
+  }
+
+  function flashScanError_(){
+    const box = document.querySelector('.settle-box') || document.querySelector('.scan-overlay');
+    if(!box) return;
+    box.classList.add('scan-err-flash');
+    setTimeout(function(){ box.classList.remove('scan-err-flash'); }, 300);
+  }
+
+  function persistCheckin_(repId, code, item, attempt){
+    callServer('checkInReturn', [MY_ID, repId, code, MY_PIN]).then(function(r){
+      if(!r.ok && attempt < 2){ setTimeout(function(){ persistCheckin_(repId, code, item, attempt+1); }, 600); }
+      else if(!r.ok){
+        item.checkedIn = false;
+        showToast('⚠️ الكود '+code+' ما اتسجّلش، أعد سكانه', 'error');
       }
     }).catch(function(){
-      if(hint) hint.textContent = '⚠️ مفيش نت، جرّب تاني — اتسجّل '+checkinCount;
+      if(attempt < 2){ setTimeout(function(){ persistCheckin_(repId, code, item, attempt+1); }, 800); }
+      else { item.checkedIn = false; showToast('⚠️ الكود '+code+' ما اتسجّلش (مفيش نت)', 'error'); }
     });
   }
 
@@ -1854,8 +2114,6 @@
     const doneCount = checkinCount, name = checkinRepName, repId = checkinRepId;
     checkinRepId = null; checkinRepName = ''; checkinCount = 0;
     if(doneCount > 0) showToast('اتسجّل رجوع '+doneCount+' طرد من '+name, 'success');
-    // نرجع نجيب ملخص الحساب المحدّث (بعد السكان) ونعرضه تاني عشان تقدر
-    // تدوس "تأكيد القفل" على طول من غير ما تدوّر على المندوب تاني
     callServer('getRepSettlementSummary', [MY_ID, repId, MY_PIN]).then(function(r){
       if(r.ok) showSettlementSummary(repId, name, r);
     }).catch(function(){});
