@@ -1868,6 +1868,7 @@
 
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
+    overlay.id = 'settlementOverlay';
     overlay.innerHTML =
       '<div class="modal-box settle-box">'+
         '<p>حساب '+esc(repName)+'</p>'+
@@ -2690,8 +2691,8 @@
       lastTime = now;
 
       if(e.key === 'Enter'){
-        // بنعتبره سكان بس لو اتجمّع طول كافي بسرعة (كود الطلب بقى 4 خانات: # + 3 أرقام)
-        if(buf.length >= 3){
+        // بنعتبره سكان بس لو اتجمّع طول كافي بسرعة (كود الطلب بقى 5 خانات: # + 4 أرقام)
+        if(buf.length >= 4){
           handleUsbScan(buf);
           e.preventDefault();
         }
