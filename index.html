@@ -599,6 +599,9 @@
   // "موجود في المخزن" (تأجيل/مغلق/لا يرد) و"مرتجعات" (باقي حالات الرفض)
   const WAREHOUSE_STATUSES = ['تأجيل', 'مغلق', 'لا يرد'];
   const RETURN_STATUSES = ['رفض و دفع', 'رفض و رفض', 'لاغي', 'تهرب'];
+  // نفس مجموعة "موجود في المخزن" — دي الحالات اللي إعادة الإسناد بتلغيها
+  // وترجّع الطلب لوضعه الطبيعي عشان يتحاول تاني (زي ما بيحصل في Code.gs)
+  const RETRYABLE_STATUSES = WAREHOUSE_STATUSES;
 
   /* ===== نداء الـ API =====
      بنبعت GET للـ Apps Script مع fn و args في الرابط.
@@ -2691,7 +2694,8 @@
       lastTime = now;
 
       if(e.key === 'Enter'){
-        // بنعتبره سكان بس لو اتجمّع طول كافي بسرعة (كود الطلب بقى 5 خانات: # + 4 أرقام)
+        // >=4 عشان يقبل الكود القديم (# + 3 أرقام = 4 خانات) والجديد
+        // (# + 4 أرقام = 5 خانات) مع بعض، بما إنه حد أدنى مش طول ثابت
         if(buf.length >= 4){
           handleUsbScan(buf);
           e.preventDefault();
@@ -2763,8 +2767,10 @@
         '<select id="rep-'+x.row+'">'+opts+'</select></div>';
       h += '<div class="commRow"><label>العمولة:</label>'+
         '<input type="number" id="comm-'+x.row+'" value="'+esc(x.commission||'')+'" placeholder="0"></div>';
+      const isRetryable = RETRYABLE_STATUSES.indexOf(x.status) > -1;
+      const assignLabel = isRetryable ? '🔁 إعادة إسناد (يلغي الحالة الحالية)' : (x.repId?'✓ تحديث الإسناد':'✓ تأكيد الإسناد');
       h += '<div class="assignActs">'+
-        '<button class="assign-btn" onclick="confirmAssign(this,'+x.row+')">✓ '+(x.repId?'تحديث الإسناد':'تأكيد الإسناد')+'</button>'+
+        '<button class="assign-btn" onclick="confirmAssign(this,'+x.row+')">'+assignLabel+'</button>'+
         (x.repId ? '<button class="unassign-btn" onclick="unassignOrder(this,'+x.row+')">إلغاء الإسناد</button>' : '')+
         '</div>';
     } else if(x.repName){
@@ -2799,14 +2805,21 @@
 
     const originalText = btn.textContent;
     btn.disabled = true; btn.textContent = 'جارِ الإسناد…';
+    let wasReopened = false;
     callServer('assignRep', [MY_ID, row, repId, MY_PIN])
       .then(function(r){
         if(!r.ok){ showToast(r.error, 'error'); btn.disabled = false; btn.textContent = originalText; return null; }
+        wasReopened = !!r.reopened;
         return callServer('setCommission', [MY_ID, row, comm, MY_PIN]);
       })
       .then(function(r2){
         if(!r2) return; // فشل في الخطوة اللي فاتت، الرسالة بالفعل ظهرت
-        if(r2.ok){ showToast('تم إسناد الطلب ✅', 'success'); load(); }
+        if(r2.ok){
+          // لو كان بحالة لا يرد/مغلق/تأجيل، الإسناد الجديد بيلغي الحالة
+          // القديمة تلقائي ويرجّعه لقيد التوصيل عشان يتحاول تاني
+          showToast(wasReopened ? 'اتلغت الحالة القديمة، وهيرجع يشتغل عليه المندوب تاني ✅' : 'تم إسناد الطلب ✅', 'success');
+          load();
+        }
         else { showToast(r2.error, 'error'); btn.disabled = false; btn.textContent = originalText; }
       })
       .catch(function(e){
