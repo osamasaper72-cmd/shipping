@@ -112,6 +112,7 @@
 
   .top{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px}
   .code{font-size:14px; color:var(--go)} .code.empty{color:var(--mut)}
+  .date-added{font-size:11px; color:var(--mut); margin-right:6px}
   .pill{font-size:11px; font-weight:700; padding:4px 9px; border-radius:20px; background:#223; color:var(--mut)}
   .pill.go{background:#16352b; color:var(--go)} .pill.no{background:#3a1f1f; color:var(--no)}
   .pill.wait{background:#3a301a; color:var(--wait)} .pill.partial{background:#14283a; color:var(--partial)}
@@ -150,6 +151,7 @@
   .acts .dodge{border-color:#3a2a52; color:var(--dodge)}
   .acts .neutral{border-color:#33404d; color:var(--neutral)}
   .acts .cancel{border-color:#52341f; color:var(--cancel)}
+  .acts .returned-btn{border-color:#1f3a52; color:#5bc8ff; background:rgba(91,200,255,.06)}
 
   .center{text-align:center; color:var(--mut); padding:50px 20px}
   .center b{display:block; color:var(--ink); font-size:17px; margin-bottom:6px}
@@ -598,10 +600,11 @@
   // مجموعتين الأوردرات اللي "راجعة" (مش متسلّمة): دي بتتقسّم لتبويبين
   // "موجود في المخزن" (تأجيل/مغلق/لا يرد) و"مرتجعات" (باقي حالات الرفض)
   const WAREHOUSE_STATUSES = ['تأجيل', 'مغلق', 'لا يرد'];
-  const RETURN_STATUSES = ['رفض و دفع', 'رفض و رفض', 'لاغي', 'تهرب'];
-  // نفس مجموعة "موجود في المخزن" — دي الحالات اللي إعادة الإسناد بتلغيها
-  // وترجّع الطلب لوضعه الطبيعي عشان يتحاول تاني (زي ما بيحصل في Code.gs)
-  const RETRYABLE_STATUSES = WAREHOUSE_STATUSES;
+  const RETURN_STATUSES = ['رفض و دفع', 'رفض و رفض', 'لاغي', 'تهرب', 'تسليم جزئي'];
+  // نفس مجموعة "موجود في المخزن" + "مرتجعات" — دي الحالات اللي إعادة
+  // الإسناد بتلغيها وترجّع الطلب لوضعه الطبيعي عشان يتحاول تاني (زي ما
+  // بيحصل في Code.gs). "تم التسليم" بس هو النهائي فعلًا.
+  const RETRYABLE_STATUSES = WAREHOUSE_STATUSES.concat(RETURN_STATUSES);
 
   /* ===== نداء الـ API =====
      بنبعت GET للـ Apps Script مع fn و args في الرابط.
@@ -1136,12 +1139,10 @@
       '<div class="c3"><span>الصافي</span><b id="statNet">'+s.net+' ج</b></div>'+
       '</div>';
 
-    if(isMgr){
+    if(d.role === 'admin'){
       html += '<div class="counter-row">';
       html += '<button class="daily-btn" onclick="openDailyCounter()">📅 تحصيل اليوم</button>';
-      if(d.role === 'admin'){
-        html += '<button class="daily-btn profit-btn" onclick="openProfitCounter()">💵 مكسبنا</button>';
-      }
+      html += '<button class="daily-btn profit-btn" onclick="openProfitCounter()">💵 مكسبنا</button>';
       html += '</div>';
     }
 
@@ -1446,7 +1447,7 @@
         '<div class="addrep-field"><label>اسم الشركة</label>'+
           '<input id="impCompany" placeholder="مثلاً: شركة كذا للتجارة"></div>'+
         '<div class="addrep-field"><label>ملف الإكسل (xlsx / xls / csv)</label>'+
-          '<input id="impFile" type="file" accept=".xlsx,.xls,.csv" onchange="handleImportFile(this)"></div>'+
+          '<input id="impFile" type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,text/comma-separated-values" onchange="handleImportFile(this)"></div>'+
         '<div id="impMapWrap" hidden>'+
           '<div class="imp-map-row"><label>اسم العميل</label><select id="impColName" onchange="renderImportPreview()"></select></div>'+
           '<div class="imp-map-row"><label>رقم الموبايل</label><select id="impColPhone" onchange="renderImportPreview()"></select></div>'+
@@ -2039,13 +2040,13 @@
     const item = all.find(function(x){ return String(x.code) === String(code); });
 
     if(!item || String(item.repId) !== String(checkinRepId) ||
-       item.status === 'تم التسليم' || item.status === 'تسليم جزئي' ||
+       item.status === 'تم التسليم' ||
        !item.status || item.status === 'جديد'){
       beepErr_();
       if(navigator.vibrate){ try{ navigator.vibrate([40,60,40]); }catch(e){} }
       let why = 'الكود ده مش موجود';
       if(item && String(item.repId) !== String(checkinRepId)) why = 'الطرد ده مش لنفس المندوب';
-      else if(item && (item.status === 'تم التسليم' || item.status === 'تسليم جزئي')) why = 'الطلب متسلّم، مش مرتجع';
+      else if(item && item.status === 'تم التسليم') why = 'الطلب متسلّم بالكامل، مش مرتجع';
       else if(item && (!item.status || item.status === 'جديد')) why = 'الطلب لسه من غير حالة';
       setMsg('⚠️ ' + why);
       flashScanError_();
@@ -2718,7 +2719,24 @@
       '<button class="neutral" onclick="setStatus(this,'+row+',\'مغلق\''+ov+')">مغلق</button>'+
       '<button class="cancel" onclick="setStatus(this,'+row+',\'لاغي\''+ov+')">لاغي</button>'+
       '<button class="wait full" onclick="setStatus(this,'+row+',\'تأجيل\''+ov+')">تأجيل</button>'+
+      (adminOverride ? '<button class="returned-btn full" onclick="markReturnedManual(this,'+row+')">↩️ مرتجع (سجّل رجوعه للمخزن من غير ما يغيّر حالته)</button>' : '')+
     '</div>';
+  }
+
+  /* اختصار طوارئ: يسجّل رجوع الطرد للمخزن مباشرة (زي لو اتسكن)، من غير
+     ما يغيّر حالته الحالية خالص — للحالات اللي المندوب مش هيقدر يوصّل
+     فيها للتقفيل بالإسكانر العادي. */
+  function markReturnedManual(btn, row){
+    showConfirm('تسجيل الطلب ده كمرتجع؟ حالته الحالية هتفضل زي ما هي، وهيظهر في تبويب المخزن/المرتجعات.').then(function(ok){
+      if(!ok) return;
+      btn.disabled = true;
+      callServer('markReturnedManually', [MY_ID, row, MY_PIN]).then(function(r){
+        if(r.ok){ showToast('اتسجّل كمرتجع ✅', 'success'); load(); }
+        else { showToast(r.error || 'حصل خطأ', 'error'); btn.disabled = false; }
+      }).catch(function(e){
+        showToast('خطأ: '+e.message, 'error'); btn.disabled = false;
+      });
+    });
   }
 
   function revealOverride(btn, row){
@@ -2730,11 +2748,19 @@
     });
   }
 
+  function formatDateAdded_(d){
+    if(!d) return '';
+    const dt = new Date(d);
+    if(isNaN(dt.getTime())) return '';
+    return dt.toLocaleDateString('ar-EG', { day:'numeric', month:'numeric' });
+  }
+
   function card(x, role, showActions, idx){
     const meta = STATUS_META[x.status] || {cls:'', label:'جديد'};
     const delayStyle = 'style="animation-delay:'+((idx||0)*35)+'ms"';
+    const dateAddedStr = formatDateAdded_(x.dateAdded);
     const codeBlock = x.code
-      ? '<span class="code mono">'+esc(x.code)+'</span>'
+      ? '<span class="code mono">'+esc(x.code)+'</span>'+(dateAddedStr?'<span class="date-added">'+dateAddedStr+'</span>':'')
       : ((role==='admin' || role==='dispatcher')
           ? '<button class="genone" onclick="genOne(this,'+x.row+')">توليد كود</button>'
           : '<span class="code empty mono">— بدون كود —</span>');
@@ -2778,14 +2804,13 @@
     }
 
     if(showActions){
-      if(role === 'admin'){
+      if(role === 'admin' || role === 'dispatcher'){
         h += '<div class="override-wrap" id="ovr-'+x.row+'">'+
           '<button class="override-btn" onclick="revealOverride(this,'+x.row+')">⚠️ تحديث الحالة يدويًا (طوارئ)</button>'+
         '</div>';
       } else if(role === 'rep'){
         h += actsBlock(x.row, false);
       }
-      // مسؤول التوزيع: من غير تحكم في حالة التسليم عمدًا
     }
 
     h += '</div>';
