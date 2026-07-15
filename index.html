@@ -188,9 +188,10 @@
   .modal-overlay{position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:9998;
     display:flex; align-items:center; justify-content:center; padding:20px}
   .modal-box{background:var(--card); border:1px solid var(--line); border-radius:16px;
-    padding:22px 20px; max-width:340px; width:100%; text-align:center}
+    padding:22px 20px; max-width:340px; width:100%; text-align:center;
+    max-height:85vh; overflow-y:auto; display:flex; flex-direction:column}
   .modal-box p{font-size:15px; line-height:1.7; margin:0 0 18px; white-space:pre-line; color:var(--ink)}
-  .modal-actions{display:flex; gap:8px}
+  .modal-actions{display:flex; gap:8px; flex-shrink:0}
   .modal-actions button{flex:1; border:0; border-radius:10px; padding:12px;
     font-family:inherit; font-weight:700; font-size:14px}
   .modal-actions .confirm{background:var(--go); color:#06241c}
@@ -2829,7 +2830,7 @@
         h += '<div class="override-wrap" id="ovr-'+x.row+'">'+
           '<div class="override-row">'+
             '<button class="override-btn" onclick="revealOverride(this,'+x.row+')">⚠️ تحديث الحالة يدويًا (طوارئ)</button>'+
-            (hasStatus && !x.checkedIn ? '<button class="returned-btn" onclick="markReturnedManual(this,'+x.row+')">↩️ مرتجع يدوي</button>' : '')+
+            (hasStatus ? '<button class="returned-btn" onclick="markReturnedManual(this,'+x.row+')">↩️ مرتجع يدوي</button>' : '')+
           '</div>'+
         '</div>';
       } else if(role === 'rep'){
